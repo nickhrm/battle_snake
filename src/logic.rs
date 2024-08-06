@@ -15,7 +15,7 @@ use rand::seq::SliceRandom;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
-use crate::{Battlesnake, Board, Game};
+use crate::{Battlesnake, Board, Coord, Game};
 
 // info is called when you create your Battlesnake on play.battlesnake.com
 // and controls your Battlesnake's appearance
@@ -80,37 +80,65 @@ pub fn get_move(_game: &Game, turn: &i32, _board: &Board, you: &Battlesnake) -> 
     //Snake is at left border of board
     if my_head.x <= 0 {
         is_move_safe.insert("left", false);
-        println!("Snake is at left border of board")
+        info!("Snake is at left border of board")
     }
 
     //Snake is at right boarder of board
     if my_head.x >= (*board_width - 1) {
         is_move_safe.insert("right", false);
-        println!("Snake is at right boarder of board")
+        info!("Snake is at right boarder of board")
     }
 
     //Snake is at top boarder of board
     if my_head.y >= (*board_height as i32 - 1) {
         is_move_safe.insert("up", false);
-        println!("Snake is at top border of board")
+        info!("Snake is at top border of board")
     }
 
     //Snake is at bottom border of board
     if my_head.y <= 0 {
         is_move_safe.insert("down", false);
-        println!("Snake is at bottom border of board")
+        info!("Snake is at bottom border of board")
     }
 
     // TODO: Step 2 - Prevent your Battlesnake from colliding with itself
     let my_body = &you.body;
-    let moves_left = my_head.x - 1;
-    let moves_right = my_head.x + 1;
-    let moves_down = my_head.y - 1;
-    let moves_up = my_head.y + 1;
+    let moves_left =  &Coord {
+        x: my_head.x - 1,
+        y: my_head.y,
+    };
+    let moves_right = &Coord {
+        x: my_head.x + 1,
+        y: my_head.y,
+    };
+    let moves_down = &Coord {
+        x: my_head.x,
+        y: my_head.y - 1,
+    };
+    let moves_up = &Coord {
+        x: my_head.x,
+        y: my_head.y + 1,
+    };
 
-    // if my_body.contains(moves_left) {
-    //     is_move_safe.insert("left", false);
-    // }
+    if my_body.contains(moves_left) {
+        is_move_safe.insert("left", false);
+        info!("moving left would create a self-collision")
+    }
+
+    if my_body.contains(moves_right) {
+        is_move_safe.insert("right", false);
+        info!("moving right would create a self-collision")
+    }
+
+    if my_body.contains(moves_down) {
+        is_move_safe.insert("down", false);
+        info!("moving down would create a self-collision")
+    }
+
+    if my_body.contains(moves_up) {
+        is_move_safe.insert("up", false);
+        info!("moving up would create a self-collision")
+    }
 
     // TODO: Step 3 - Prevent your Battlesnake from colliding with other Battlesnakes
     // let opponents = &board.snakes;
@@ -122,6 +150,7 @@ pub fn get_move(_game: &Game, turn: &i32, _board: &Board, you: &Battlesnake) -> 
         .map(|(k, _)| k)
         .collect::<Vec<_>>();
     
+    info!("Moves left: {:#?} ", safe_moves);
     // Choose a random move from the safe ones
     let chosen = safe_moves.choose(&mut rand::thread_rng()).unwrap();
 
