@@ -74,11 +74,43 @@ pub fn get_move(_game: &Game, turn: &i32, _board: &Board, you: &Battlesnake) -> 
     }
 
     // TODO: Step 1 - Prevent your Battlesnake from moving out of bounds
-    // let board_width = &board.width;
-    // let board_height = &board.height;
+    let board_width = &_board.width;
+    let board_height = &_board.height;
+
+    //Snake is at left border of board
+    if my_head.x <= 0 {
+        is_move_safe.insert("left", false);
+        println!("Snake is at left border of board")
+    }
+
+    //Snake is at right boarder of board
+    if my_head.x >= (*board_width - 1) {
+        is_move_safe.insert("right", false);
+        println!("Snake is at right boarder of board")
+    }
+
+    //Snake is at top boarder of board
+    if my_head.y >= (*board_height as i32 - 1) {
+        is_move_safe.insert("up", false);
+        println!("Snake is at top border of board")
+    }
+
+    //Snake is at bottom border of board
+    if my_head.y <= 0 {
+        is_move_safe.insert("down", false);
+        println!("Snake is at bottom border of board")
+    }
 
     // TODO: Step 2 - Prevent your Battlesnake from colliding with itself
-    // let my_body = &you.body;
+    let my_body = &you.body;
+    let moves_left = my_head.x - 1;
+    let moves_right = my_head.x + 1;
+    let moves_down = my_head.y - 1;
+    let moves_up = my_head.y + 1;
+
+    // if my_body.contains(moves_left) {
+    //     is_move_safe.insert("left", false);
+    // }
 
     // TODO: Step 3 - Prevent your Battlesnake from colliding with other Battlesnakes
     // let opponents = &board.snakes;
