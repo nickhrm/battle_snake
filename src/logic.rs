@@ -141,7 +141,10 @@ pub fn get_move(_game: &Game, turn: &i32, _board: &Board, you: &Battlesnake) -> 
     }
 
     // TODO: Step 3 - Prevent your Battlesnake from colliding with other Battlesnakes
-    // let opponents = &board.snakes;
+    // let opponents = _board.snakes;
+    // for snake in opponents.iter_mut() {
+
+    // }
 
     // Are there any safe moves left?
     let safe_moves = is_move_safe
