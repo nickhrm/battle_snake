@@ -6,11 +6,12 @@ use rocket::fairing::AdHoc;
 use rocket::http::Status;
 use rocket::serde::{json::Json, Deserialize};
 use serde::Serialize;
-use serde_json::{Value};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::env;
 
 mod logic;
+mod move_utils;
 
 // API and Response Objects
 // See https://docs.battlesnake.com/api
@@ -43,7 +44,7 @@ pub struct Battlesnake {
     shout: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Debug,PartialEq)]
+#[derive(Deserialize, Serialize, Debug, PartialEq)]
 pub struct Coord {
     x: i32,
     y: i32,
