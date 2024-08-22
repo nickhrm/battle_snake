@@ -53,7 +53,7 @@ pub fn end(_game: &Game, _turn: &i32, _board: &Board, _you: &Battlesnake) {
 pub fn get_move(_game: &Game, turn: &i32, _board: &Board, you: &Battlesnake) -> Value {
 
     let p: &Coord = &you.body[0]; // Coordinates of your head
-    let goal: &Coord = _board.food.choose(&mut rand::thread_rng()).unwrap();
+    let goal: &Coord = &_board.food[0];
 
     let result = astar(
         p,
@@ -78,8 +78,6 @@ pub fn get_move(_game: &Game, turn: &i32, _board: &Board, you: &Battlesnake) -> 
         }
     };
     
-
-
 
 
     info!("MOVE {}: {}", turn, next_move);

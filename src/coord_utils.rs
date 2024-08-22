@@ -34,6 +34,8 @@ impl Coord {
         ];
 
 
+
+
         all_moves.retain(|mov| {
             //check if in body
             for coord in you.body.clone() {
@@ -41,10 +43,11 @@ impl Coord {
                     return false;
                 } 
             }
-            
-
             return true;
         });
+
+        
+
 
         return all_moves.into_iter().map(|p| (p, 1)).collect();
     }
