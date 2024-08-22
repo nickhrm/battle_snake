@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate rocket;
 
+use coord_utils::Coord;
 use log::info;
 use rocket::fairing::AdHoc;
 use rocket::http::Status;
@@ -10,6 +11,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::env;
 
+mod coord_utils;
 mod logic;
 mod move_utils;
 
@@ -42,12 +44,6 @@ pub struct Battlesnake {
     length: i32,
     latency: String,
     shout: Option<String>,
-}
-
-#[derive(Deserialize, Serialize, Debug, PartialEq)]
-pub struct Coord {
-    x: i32,
-    y: i32,
 }
 
 #[derive(Deserialize, Serialize, Debug)]

@@ -10,13 +10,17 @@
 // To get you started we've included code to prevent your Battlesnake from moving backwards.
 // For more info see docs.battlesnake.com
 
-use crate::move_utils::{Moves, SafeMoves};
+use crate::{
+    coord_utils::Coord,
+    move_utils::{Moves, SafeMoves},
+};
 use log::info;
+use pathfinding::prelude::astar;
 use rand::seq::SliceRandom;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
-use crate::{Battlesnake, Board, Coord, Game};
+use crate::{Battlesnake, Board, Game};
 
 // info is called when you create your Battlesnake on play.battlesnake.com
 // and controls your Battlesnake's appearance
@@ -47,7 +51,19 @@ pub fn end(_game: &Game, _turn: &i32, _board: &Board, _you: &Battlesnake) {
 // Valid moves are "up", "down", "left", or "right"
 // See https://docs.battlesnake.com/api/example-move for available data
 pub fn get_move(_game: &Game, turn: &i32, _board: &Board, you: &Battlesnake) -> Value {
-    let safe_moves: SafeMoves = SafeMoves::init();
+    let mut safe_moves: SafeMoves = SafeMoves::init();
+
+    let p: &Coord = &you.body[0]; // Coordinates of your head
+    let goal: &Coord = _board.food.choose(&mut rand::thread_rng()).unwrap();
+
+    let result = astar(
+        p,
+        |p| p.successors(_board, you),
+        |p| p.distance(goal) / 3,
+        |p| p == goal,
+    );
+
+    println!("{:?}", result);
 
     // We've included code to prevent your Battlesnake from moving backwards
     let my_head = &you.body[0]; // Coordinates of your head
@@ -144,7 +160,7 @@ pub fn get_move(_game: &Game, turn: &i32, _board: &Board, you: &Battlesnake) -> 
 
     info!("Moves left: {:#?} ", safe_moves.get_safe_moves());
     // Choose a random move from the safe ones
-    let chosen = get_safe_move();
+    let chosen = safe_moves.get_safe_move();
 
     // TODO: Step 4 - Move towards food instead of random, to regain health and survive longer
     // let food = &board.food;
