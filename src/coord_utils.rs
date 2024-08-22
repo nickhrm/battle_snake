@@ -10,7 +10,11 @@ pub struct Coord {
 
 impl Coord {
     pub fn successors(&self, board: &Board, you: &Battlesnake) -> Vec<(Coord, u32)> {
-        let all_moves = vec![
+
+
+
+
+        let mut all_moves = vec![
             Coord {
                 x: self.x + 1,
                 y: self.y,
@@ -28,6 +32,19 @@ impl Coord {
                 y: self.y + 1,
             },
         ];
+
+
+        all_moves.retain(|mov| {
+            //check if in body
+            for coord in you.body.clone() {
+                if mov == &coord {
+                    return false;
+                } 
+            }
+            
+
+            return true;
+        });
 
         return all_moves.into_iter().map(|p| (p, 1)).collect();
     }
