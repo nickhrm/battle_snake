@@ -4,14 +4,14 @@ use rand::Rng;
 use serde::Serialize;
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
-pub enum Moves {
+pub enum Move {
     Left,
     Right,
     Up,
     Down,
 }
 
-impl fmt::Display for Moves {
+impl fmt::Display for Move {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let direction = match self {
             Self::Left => "left",
@@ -23,7 +23,7 @@ impl fmt::Display for Moves {
     }
 }
 
-impl Serialize for Moves {
+impl Serialize for Move {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -33,28 +33,28 @@ impl Serialize for Moves {
 }
 #[derive(Clone)]
 pub struct SafeMoves {
-    moves: HashMap<Moves, bool>,
+    moves: HashMap<Move, bool>,
 }
 
 impl SafeMoves {
     pub fn init() -> SafeMoves {
         SafeMoves {
             moves: vec![
-                (Moves::Left, true),
-                (Moves::Right, true),
-                (Moves::Up, true),
-                (Moves::Down, true),
+                (Move::Left, true),
+                (Move::Right, true),
+                (Move::Up, true),
+                (Move::Down, true),
             ]
             .into_iter()
             .collect(),
         }
     }
 
-    pub fn remove_move(&mut self, mov: Moves) {
+    pub fn remove_move(&mut self, mov: Move) {
         self.moves.insert(mov, false);
     }
 
-    pub fn get_safe_moves(&self) -> Vec<Moves> {
+    pub fn get_safe_moves(&self) -> Vec<Move> {
         self.moves
             .iter()
             .filter(|&(_, &v)| v)
@@ -62,7 +62,7 @@ impl SafeMoves {
             .collect()
     }
 
-    pub fn get_safe_move(&self) -> Moves {
+    pub fn get_safe_move(&self) -> Move {
         let safe_moves = self.get_safe_moves();
         let len = safe_moves.len();
         let index = rand::thread_rng().gen_range(0..len);

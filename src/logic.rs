@@ -12,7 +12,7 @@
 
 use crate::{
     coord_utils::Coord,
-    move_utils::{Moves, SafeMoves},
+    move_utils::{Move, SafeMoves},
 };
 use log::info;
 use pathfinding::prelude::astar;
@@ -52,34 +52,47 @@ pub fn end(_game: &Game, _turn: &i32, _board: &Board, _you: &Battlesnake) {
 // See https://docs.battlesnake.com/api/example-move for available data
 pub fn get_move(_game: &Game, turn: &i32, _board: &Board, you: &Battlesnake) -> Value {
 
+    
+    println!("w: {},h: {}", _board.width, _board.height);
+
     let p: &Coord = &you.body[0]; // Coordinates of your head
     let goal: &Coord = &_board.food[0];
 
-    let result = astar(
-        p,
-        |p| p.successors(_board, you),
-        |p| p.distance(goal) / 3,
-        |p| p == goal,
-    ).unwrap();
+    println!("Goal: {:?}, Current Pos: {:?}", goal, p);
 
-    println!("{:?}", result);
+    let result: Option<(Vec<Coord>, u32)> = _board.food.iter().find_map(|food| {
+        astar(
+            p,
+            |p| p.successors(_board, you),
+            |p| p.distance(food) / 3,
+            |p| p == food,
+        )
+    });
 
-    let next_coord = &result.0[1];
+    match result {
+        Some(res) => {
+            println!("Pfad ist: {:?}", res);
+            let next_coord = &res.0[1];
 
-    let next_move = {
-        if next_coord.x > p.x {
-            Moves::Right
-        } else if next_coord.x < p.x {
-            Moves::Left
-        } else if next_coord.y > p.y {
-            Moves::Up
-        } else {
-            Moves::Down
+            let next_move = {
+                if next_coord.x > p.x {
+                    Move::Right
+                } else if next_coord.x < p.x {
+                    Move::Left
+                } else if next_coord.y > p.y {
+                    Move::Up
+                } else {
+                    Move::Down
+                }
+            };
+
+            info!("MOVE {}: {}", turn, next_move);
+            return json!({ "move": next_move });
         }
-    };
-    
 
-
-    info!("MOVE {}: {}", turn, next_move);
-    return json!({ "move": next_move });
+        None => {
+            info!("MOVE {}: No move found. Moving down as default", turn);
+            return json!({ "move": Move::Left });
+        }
+    }
 }
