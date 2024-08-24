@@ -56,10 +56,11 @@ pub fn get_move(_game: &Game, turn: &i32, _board: &Board, you: &Battlesnake) -> 
         astar(
             p,
             |p| p.successors(_board, you),
-            |p| p.distance(food) / 3,
+            |p| p.distance(food),
             |p| p == food,
         )
     });
+    
     match path {
         Some(res) => {
             println!("Pfad ist: {:?}", res);
