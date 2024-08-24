@@ -42,13 +42,14 @@ impl Coord {
         all_moves.retain(|future_coord| !you.body.iter().any(|coord| future_coord == coord));
 
         // //prevent collision with other snakes
-        // all_moves.retain(|future_coord| {
-        //     board
-        //         .snakes
-        //         .iter()
-        //         .any(|snake| snake.body.iter().any(|coord| future_coord == coord))
-        // });
+        all_moves.retain(|future_coord| {
+            !board
+                .snakes
+                .iter()
+                .any(|snake| snake.body.iter().any(|coord| future_coord == coord))
+        });
 
+        
         let board_width = board.width;
         let board_height = board.height;
 
