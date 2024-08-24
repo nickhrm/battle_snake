@@ -28,17 +28,6 @@ impl Battlesnake {
         Move::Down
     }
 
-    //alle möglichen nächsten Head positionen berechnen
-    fn most_likely_next_head(&self) -> Vec<Coord> {
-        let head = self.head.clone();
-        vec![
-            head.get_next(&Move::Left),
-            head.get_next(&Move::Right),
-            head.get_next(&Move::Up),
-            head.get_next(&Move::Down),
-        ]
-    }
-
     pub fn get_reachable_apple(&self, food: Vec<Coord>) -> Option<Coord> {
         let all_next_heads = vec![
             self.head.get_next(&Move::Left),
@@ -65,7 +54,6 @@ impl Battlesnake {
 
     pub fn next_rounds_snake(&self, you_length: i32, food: Vec<Coord>) -> Battlesnake {
         let mut new_snake = self.clone();
-        return  new_snake;
 
         match self.get_reachable_apple(food) {
             Some(apple_pos) => {
@@ -74,7 +62,7 @@ impl Battlesnake {
                 }
             }
             None => {
-                new_snake.remove_tail();
+                new_snake = new_snake.remove_tail();
                 if self.length >= you_length {
                     new_snake
                         .body

@@ -55,23 +55,14 @@ pub fn get_move(_game: &Game, turn: &i32, _board: &Board, you: &Battlesnake) -> 
 
     println!("Goal: {:?}, Current Pos: {:?}", goal, p);
 
-    let result: Option<(Vec<Coord>, u32)> = astar(
+    let path: Option<(Vec<Coord>, u32)> = astar(
         p,
         |p| p.successors(_board, you),
         |p| p.distance(goal),
         |p| p == goal,
     );
 
-    // let result: Option<(Vec<Coord>, u32)> = _board.food.iter().find_map(|food| {
-    //     astar(
-    //         p,
-    //         |p| p.successors(_board, you),
-    //         |p| p.distance(food) / 3,
-    //         |p| p == food,
-    //     )
-    // });
-
-    match result {
+    match path {
         Some(res) => {
             println!("Pfad ist: {:?}", res);
             let next_coord = &res.0[1];
