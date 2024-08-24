@@ -10,7 +10,7 @@
 // To get you started we've included code to prevent your Battlesnake from moving backwards.
 // For more info see docs.battlesnake.com
 
-use crate::{coord_utils::Coord, local_planner::local_planner, move_utils::Move};
+use crate::{coord_utils::Coord, local_planner::local_planner, move_utils::Move, GameState};
 use log::info;
 use pathfinding::prelude::astar;
 use serde_json::{json, Value};
@@ -51,8 +51,10 @@ pub fn get_move(_game: &Game, turn: &i32, _board: &Board, you: &Battlesnake) -> 
     let p: &Coord = &you.body[0]; // Coordinates of your head
     let mut goal: &Coord = &_board.food[0];
 
-    if you.length >= 5 {
+    if turn >= &6 {
         goal = &you.body.last().unwrap_or(&you.head);
+    }else if  turn >= &20 {
+        goal = &_board.food[0];
     }
 
     println!("Goal: {:?}, Current Pos: {:?}", goal, p);
