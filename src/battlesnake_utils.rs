@@ -8,7 +8,7 @@ pub struct Battlesnake {
     name: String,
     health: i32,
     pub body: Vec<Coord>,
-    head: Coord,
+    pub head: Coord,
     pub length: i32,
     latency: String,
     shout: Option<String>,
