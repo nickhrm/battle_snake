@@ -16,26 +16,18 @@ pub struct Battlesnake {
 
 impl Battlesnake {
     //alle möglichen nächsten Head positionen berechnen
-     fn next_heads(&self) -> Vec<Coord> {
-        let current_head = self.body.first();
-
-        match current_head {
-            None => {
-                vec![]
-            }
-            Some(head) => {
-                vec![
-                    head.get_next(Move::Left),
-                    head.get_next(Move::Right),
-                    head.get_next(Move::Up),
-                    head.get_next(Move::Down),
-                ]
-            }
-        }
+    fn next_heads(&self) -> Vec<Coord> {
+        let head = self.head.clone();
+        vec![
+            head.get_next(Move::Left),
+            head.get_next(Move::Right),
+            head.get_next(Move::Up),
+            head.get_next(Move::Down),
+        ]
     }
 
     //Dor wo der Tail aktuell ist, wird zum nächst möglichen Zeitpunkt frei sein
-     fn remove_tail(&self) -> Battlesnake {
+    fn remove_tail(&self) -> Battlesnake {
         let mut new_snake: Battlesnake = self.clone();
         new_snake.body.pop();
         new_snake

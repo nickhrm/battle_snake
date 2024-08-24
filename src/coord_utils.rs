@@ -42,10 +42,11 @@ impl Coord {
         all_moves.retain(|future_coord| !you.body.iter().any(|coord| future_coord == coord));
 
         //calculate the real next snakes
-        let real_snakes:Vec<Battlesnake> = board
-        .snakes
-        .iter().map(|snake| snake.next_rounds_snake(you.length)).collect();
-
+        let real_snakes: Vec<Battlesnake> = board
+            .snakes
+            .iter()
+            .map(|snake| snake.next_rounds_snake(you.length))
+            .collect();
 
         //prevent collision with other snakes
         all_moves.retain(|future_coord| {
@@ -54,9 +55,9 @@ impl Coord {
                 .any(|snake| snake.body.iter().any(|coord| future_coord == coord))
         });
 
+        //prevent going out of bounds
         let board_width = board.width;
         let board_height = board.height;
-
         all_moves.retain(|future_coord| {
             if future_coord.x >= board_width {
                 return false;
