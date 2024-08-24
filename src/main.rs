@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate rocket;
 
+use battlesnake_utils::Battlesnake;
 use coord_utils::Coord;
 use log::info;
 use rocket::fairing::AdHoc;
@@ -11,10 +12,11 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::env;
 
+mod battlesnake_utils;
 mod coord_utils;
+mod local_planner;
 mod logic;
 mod move_utils;
-mod local_planner;
 
 // API and Response Objects
 // See https://docs.battlesnake.com/api
@@ -33,18 +35,6 @@ pub struct Board {
     food: Vec<Coord>,
     snakes: Vec<Battlesnake>,
     hazards: Vec<Coord>,
-}
-
-#[derive(Deserialize, Serialize, Debug)]
-pub struct Battlesnake {
-    id: String,
-    name: String,
-    health: i32,
-    body: Vec<Coord>,
-    head: Coord,
-    length: i32,
-    latency: String,
-    shout: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]

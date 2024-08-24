@@ -1,6 +1,5 @@
-use std::{collections::HashMap, fmt};
+use std::fmt;
 
-use rand::Rng;
 use serde::Serialize;
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
