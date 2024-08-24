@@ -44,7 +44,7 @@ impl Coord {
         // } else {
         //     you.remove_tail()
         // };
-        
+
         let real_my_body = you;
 
         all_moves
