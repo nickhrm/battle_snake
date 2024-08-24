@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{Battlesnake, Board};
+use crate::{move_utils::Move, Battlesnake, Board};
 
 #[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Coord {
@@ -9,24 +9,33 @@ pub struct Coord {
 }
 
 impl Coord {
-    pub fn successors(&self, board: &Board, you: &Battlesnake) -> Vec<(Coord, u32)> {
-        let mut all_moves = vec![
-            Coord {
-                x: self.x + 1,
-                y: self.y,
-            },
-            Coord {
+    pub fn get_next(&self, mov: Move) -> Coord {
+        match mov {
+            Move::Left => Coord {
                 x: self.x - 1,
                 y: self.y,
             },
-            Coord {
-                x: self.x,
-                y: self.y - 1,
+            Move::Right => Coord {
+                x: self.x + 1,
+                y: self.y,
             },
-            Coord {
+            Move::Up => Coord {
                 x: self.x,
                 y: self.y + 1,
             },
+            Move::Down => Coord {
+                x: self.x,
+                y: self.y - 1,
+            },
+        }
+    }
+
+    pub fn successors(&self, board: &Board, you: &Battlesnake) -> Vec<(Coord, u32)> {
+        let mut all_moves = vec![
+            self.get_next(Move::Left),
+            self.get_next(Move::Right),
+            self.get_next(Move::Up),
+            self.get_next(Move::Down),
         ];
 
         //prevent collision with its own body
@@ -58,7 +67,7 @@ impl Coord {
             }
             return true;
         });
-        
+
         return all_moves.into_iter().map(|p| (p, 1)).collect();
     }
 

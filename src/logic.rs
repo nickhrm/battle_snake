@@ -10,15 +10,10 @@
 // To get you started we've included code to prevent your Battlesnake from moving backwards.
 // For more info see docs.battlesnake.com
 
-use crate::{
-    coord_utils::Coord,
-    move_utils::{Move, SafeMoves},
-};
+use crate::{coord_utils::Coord, move_utils::Move};
 use log::info;
 use pathfinding::prelude::astar;
-use rand::seq::SliceRandom;
 use serde_json::{json, Value};
-use std::collections::HashMap;
 
 use crate::{Battlesnake, Board, Game};
 
@@ -51,8 +46,6 @@ pub fn end(_game: &Game, _turn: &i32, _board: &Board, _you: &Battlesnake) {
 // Valid moves are "up", "down", "left", or "right"
 // See https://docs.battlesnake.com/api/example-move for available data
 pub fn get_move(_game: &Game, turn: &i32, _board: &Board, you: &Battlesnake) -> Value {
-
-    
     println!("w: {},h: {}", _board.width, _board.height);
 
     let p: &Coord = &you.body[0]; // Coordinates of your head
