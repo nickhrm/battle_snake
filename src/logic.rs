@@ -53,21 +53,18 @@ pub fn get_move(_game: &Game, turn: &i32, _board: &Board, you: &Battlesnake) -> 
 
     if turn >= &6 {
         goal = &you.body.last().unwrap_or(&you.head);
-    }else if  turn >= &20 {
+    } else if turn >= &20 {
         goal = &_board.food[0];
     }
 
     println!("Goal: {:?}, Current Pos: {:?}", goal, p);
 
-        let result: Option<(Vec<Coord>, u32)> = astar(
-            p,
-            |p| p.successors(_board, you),
-            |p| p.distance(goal) / 3,
-            |p| p == goal,
-        );
-    
-
-
+    let result: Option<(Vec<Coord>, u32)> = astar(
+        p,
+        |p| p.successors(_board, you),
+        |p| p.distance(goal),
+        |p| p == goal,
+    );
 
     // let result: Option<(Vec<Coord>, u32)> = _board.food.iter().find_map(|food| {
     //     astar(

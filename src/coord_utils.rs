@@ -9,7 +9,7 @@ pub struct Coord {
 }
 
 impl Coord {
-    pub fn get_next(&self, mov: Move) -> Coord {
+    pub fn get_next(&self, mov: &Move) -> Coord {
         match mov {
             Move::Left => Coord {
                 x: self.x - 1,
@@ -32,21 +32,22 @@ impl Coord {
 
     pub fn successors(&self, board: &Board, you: &Battlesnake) -> Vec<(Coord, u32)> {
         let mut all_moves = vec![
-            self.get_next(Move::Left),
-            self.get_next(Move::Right),
-            self.get_next(Move::Up),
-            self.get_next(Move::Down),
+            self.get_next(&Move::Left),
+            self.get_next(&Move::Right),
+            self.get_next(&Move::Up),
+            self.get_next(&Move::Down),
         ];
 
         //prevent collision with its own body
         let real_my_body = you.remove_tail();
-        all_moves.retain(|future_coord| !real_my_body.body.iter().any(|coord| future_coord == coord));
+        all_moves
+            .retain(|future_coord| !real_my_body.body.iter().any(|coord| future_coord == coord));
 
         //calculate the real next snakes
         let real_snakes: Vec<Battlesnake> = board
             .snakes
             .iter()
-            .map(|snake| snake.next_rounds_snake(you.length))
+            .map(|snake| snake.next_rounds_snake(you.length, board.food.clone()))
             .collect();
 
         //prevent collision with other snakes

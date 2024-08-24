@@ -15,15 +15,45 @@ pub struct Battlesnake {
 }
 
 impl Battlesnake {
+    fn get_direction(&self) -> Move {
+        let neck = &self.body[0];
+
+        let moves = vec![Move::Left, Move::Right, Move::Up, Move::Down];
+
+        for mov in &moves {
+            if neck.get_next(mov) == self.head {
+                return mov.clone();
+            }
+        }
+        Move::Down
+    }
+
     //alle möglichen nächsten Head positionen berechnen
-    fn next_heads(&self) -> Vec<Coord> {
+    fn most_likely_next_head(&self) -> Vec<Coord> {
         let head = self.head.clone();
         vec![
-            head.get_next(Move::Left),
-            head.get_next(Move::Right),
-            head.get_next(Move::Up),
-            head.get_next(Move::Down),
+            head.get_next(&Move::Left),
+            head.get_next(&Move::Right),
+            head.get_next(&Move::Up),
+            head.get_next(&Move::Down),
         ]
+    }
+
+    pub fn get_reachable_apple(&self, food: Vec<Coord>) -> Option<Coord> {
+        let all_next_heads = vec![
+            self.head.get_next(&Move::Left),
+            self.head.get_next(&Move::Right),
+            self.head.get_next(&Move::Up),
+            self.head.get_next(&Move::Down),
+        ];
+
+        for next_head in all_next_heads {
+            if food.contains(&next_head) {
+                return Some(next_head);
+            }
+        }
+
+        None
     }
 
     //Dor wo der Tail aktuell ist, wird zum nächst möglichen Zeitpunkt frei sein
@@ -33,13 +63,25 @@ impl Battlesnake {
         new_snake
     }
 
-    pub fn next_rounds_snake(&self, you_length: i32) -> Battlesnake {
+    pub fn next_rounds_snake(&self, you_length: i32, food: Vec<Coord>) -> Battlesnake {
         let mut new_snake = self.clone();
 
-        // if self.length >= you_length {
-        //     new_snake.body.append(&mut self.next_heads());
-        // }
-        new_snake = self.remove_tail();
+        match self.get_reachable_apple(food) {
+            Some(apple_pos) => {
+                if self.length >= you_length {
+                    new_snake.body.push(apple_pos);
+                }
+            }
+            None => {
+                new_snake.remove_tail();
+                if self.length >= you_length {
+                    new_snake
+                        .body
+                        .push(self.head.get_next(&self.get_direction()))
+                }
+            }
+        }
+
         new_snake
     }
 }
