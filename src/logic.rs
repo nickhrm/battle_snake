@@ -49,13 +49,9 @@ pub fn get_move(_game: &Game, turn: &i32, _board: &Board, you: &Battlesnake) -> 
     println!("w: {},h: {}", _board.width, _board.height);
 
     let p: &Coord = &you.body[0]; // Coordinates of your head
-    let mut goal: &Coord = &_board.food[0];
+    let goal: &Coord = &_board.food[0];
 
-    if turn >= &6 {
-        goal = &you.body.last().unwrap_or(&you.head);
-    } else if turn >= &20 {
-        goal = &_board.food[0];
-    }
+
 
     println!("Goal: {:?}, Current Pos: {:?}", goal, p);
 
