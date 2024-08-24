@@ -10,7 +10,7 @@
 // To get you started we've included code to prevent your Battlesnake from moving backwards.
 // For more info see docs.battlesnake.com
 
-use crate::{coord_utils::Coord, move_utils::Move};
+use crate::{coord_utils::Coord, local_planner::local_planner, move_utils::Move};
 use log::info;
 use pathfinding::prelude::astar;
 use serde_json::{json, Value};
@@ -26,7 +26,7 @@ pub fn info() -> Value {
     return json!({
         "apiversion": "1",
         "author": "", // TODO: Your Battlesnake Username
-        "color": "#888888", // TODO: Choose color
+        "color": "#ff5f3b", // TODO: Choose color
         "head": "default", // TODO: Choose head
         "tail": "default", // TODO: Choose tail
     });
@@ -67,17 +67,7 @@ pub fn get_move(_game: &Game, turn: &i32, _board: &Board, you: &Battlesnake) -> 
             println!("Pfad ist: {:?}", res);
             let next_coord = &res.0[1];
 
-            let next_move = {
-                if next_coord.x > p.x {
-                    Move::Right
-                } else if next_coord.x < p.x {
-                    Move::Left
-                } else if next_coord.y > p.y {
-                    Move::Up
-                } else {
-                    Move::Down
-                }
-            };
+            let next_move = local_planner(p, next_coord);
 
             info!("MOVE {}: {}", turn, next_move);
             return json!({ "move": next_move });

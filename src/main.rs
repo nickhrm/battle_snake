@@ -14,6 +14,7 @@ use std::env;
 mod coord_utils;
 mod logic;
 mod move_utils;
+mod local_planner;
 
 // API and Response Objects
 // See https://docs.battlesnake.com/api
