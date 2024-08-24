@@ -36,9 +36,9 @@ impl Battlesnake {
     pub fn next_rounds_snake(&self, you_length: i32) -> Battlesnake {
         let mut new_snake = self.clone();
 
-        if self.length >= you_length {
-            new_snake.body.append(&mut self.next_heads());
-        }
+        // if self.length >= you_length {
+        //     new_snake.body.append(&mut self.next_heads());
+        // }
         new_snake = self.remove_tail();
         new_snake
     }
