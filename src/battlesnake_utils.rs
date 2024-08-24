@@ -27,7 +27,7 @@ impl Battlesnake {
     }
 
     //Dor wo der Tail aktuell ist, wird zum nächst möglichen Zeitpunkt frei sein
-    fn remove_tail(&self) -> Battlesnake {
+    pub fn remove_tail(&self) -> Battlesnake {
         let mut new_snake: Battlesnake = self.clone();
         new_snake.body.pop();
         new_snake

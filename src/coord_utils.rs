@@ -39,7 +39,8 @@ impl Coord {
         ];
 
         //prevent collision with its own body
-        all_moves.retain(|future_coord| !you.body.iter().any(|coord| future_coord == coord));
+        let real_my_body = you.remove_tail();
+        all_moves.retain(|future_coord| !real_my_body.body.iter().any(|coord| future_coord == coord));
 
         //calculate the real next snakes
         let real_snakes: Vec<Battlesnake> = board
