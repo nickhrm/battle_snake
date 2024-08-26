@@ -65,7 +65,8 @@ pub fn get_move(_game: &Game, turn: &i32, _board: &Board, you: &Battlesnake) -> 
 
     match path {
         Some(res) => {
-            let (coord_vec, _) = res;
+            let (mut coord_vec, _) = res;
+            coord_vec.remove(0);
 
             let next_move = local_planner(p, &coord_vec[0]);
 
