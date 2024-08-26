@@ -434,6 +434,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fbf6a919d6cf397374f7dfeeea91d974c7c0a7221d0d0f4f20d859d329e53fcc"
 
 [[package]]
+name = "honey_badger"
+version = "1.0.0"
+dependencies = [
+ "env_logger",
+ "log",
+ "pathfinding",
+ "rand",
+ "rocket",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "http"
 version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1184,19 +1197,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4564168c00635f88eaed410d5efa8131afa8d8699a612c80c455a0ba05c21045"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "starter-snake-rust"
-version = "1.0.0"
-dependencies = [
- "env_logger",
- "log",
- "pathfinding",
- "rand",
- "rocket",
- "serde",
- "serde_json",
 ]
 
 [[package]]
