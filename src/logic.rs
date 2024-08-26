@@ -10,7 +10,7 @@
 // To get you started we've included code to prevent your Battlesnake from moving backwards.
 // For more info see docs.battlesnake.com
 
-use crate::{coord_utils::Coord, local_planner::local_planner, move_utils::Move, GameState};
+use crate::{coord_utils::Coord, local_planner::local_planner, move_utils::Move};
 use log::info;
 use pathfinding::prelude::astar;
 use serde_json::{json, Value};

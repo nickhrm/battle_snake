@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{move_utils::Move, Battlesnake, Board};
 
-#[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct Coord {
     pub x: i32,
     pub y: i32,

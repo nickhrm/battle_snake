@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate rocket;
 
+
 use battlesnake_utils::Battlesnake;
 use coord_utils::Coord;
 use log::info;
@@ -17,6 +18,7 @@ mod coord_utils;
 mod local_planner;
 mod logic;
 mod move_utils;
+mod battlesnake_utils_tests;
 
 // API and Response Objects
 // See https://docs.battlesnake.com/api
