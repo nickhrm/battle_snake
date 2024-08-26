@@ -38,18 +38,6 @@ impl Coord {
             self.get_next(&Move::Down),
         ];
 
-        //prevent collision with its own body
-        // let real_my_body = if you.get_reachable_apple(board.food.clone()).is_some() {
-        //     you.clone()
-        // } else {
-        //     you.remove_tail()
-        // };
-
-        let real_my_body = you;
-
-        all_moves
-            .retain(|future_coord| !real_my_body.body.iter().any(|coord| future_coord == coord));
-
         //calculate the real next snakes
         let real_snakes: Vec<Battlesnake> = board
             .snakes
@@ -57,7 +45,7 @@ impl Coord {
             .map(|snake| snake.next_rounds_snake(you.length, board.food.clone()))
             .collect();
 
-        //prevent collision with other snakes
+        //prevent collision with other snakes and myself
         all_moves.retain(|future_coord| {
             !real_snakes
                 .iter()

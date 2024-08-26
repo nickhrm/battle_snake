@@ -11,10 +11,9 @@
 // For more info see docs.battlesnake.com
 
 use crate::{
-    coord_utils::Coord, local_planner::local_planner, move_utils::Move, print_util::print_board,
+    coord_utils::Coord, goal_planner::goal_planner, local_planner::local_planner, move_utils::Move, print_util::print_board
 };
 use log::info;
-use pathfinding::prelude::astar;
 use serde_json::{json, Value};
 
 use crate::{Battlesnake, Board, Game};
@@ -54,21 +53,9 @@ pub fn get_move(_game: &Game, turn: &i32, _board: &Board, you: &Battlesnake) -> 
     let goal: &Coord = &_board.food[0];
 
     println!("Goal: {:?}, Current Pos: {:?}", goal, p);
-    let path: Option<(Vec<Coord>, u32)> = _board.food.iter().find_map(|food| {
-        astar(
-            p,
-            |p| p.successors(_board, you),
-            |p| p.distance(food),
-            |p| p == food,
-        )
-    });
-
-    match path {
-        Some(res) => {
-            let (mut coord_vec, _) = res;
-            coord_vec.remove(0);
-
-            let next_move = local_planner(p, &coord_vec[0]);
+    let path: Vec<Coord> = goal_planner(_board.food, you,_board);
+    
+            let next_move = local_planner(p, &path);
             
 
             let mut new_board = _board.clone();
@@ -82,11 +69,8 @@ pub fn get_move(_game: &Game, turn: &i32, _board: &Board, you: &Battlesnake) -> 
 
             info!("MOVE {}: {}", turn, next_move);
             return json!({ "move": next_move });
-        }
 
-        None => {
-            info!("MOVE {}: No move found. Moving down as default", turn);
-            return json!({ "move": Move::Left });
-        }
+
+    
     }
 }

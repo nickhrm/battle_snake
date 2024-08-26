@@ -19,6 +19,7 @@ mod local_planner;
 mod logic;
 mod move_utils;
 mod print_util;
+mod goal_planner;
 
 // API and Response Objects
 // See https://docs.battlesnake.com/api
