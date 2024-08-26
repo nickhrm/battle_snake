@@ -70,6 +70,7 @@ pub fn get_move(_game: &Game, turn: &i32, _board: &Board, you: &Battlesnake) -> 
 
             let next_move = local_planner(p, &coord_vec[0]);
 
+            println!("{:?}", you);
             print_board(_board, you, &coord_vec);
 
             info!("MOVE {}: {}", turn, next_move);
