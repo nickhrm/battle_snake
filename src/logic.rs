@@ -10,7 +10,9 @@
 // To get you started we've included code to prevent your Battlesnake from moving backwards.
 // For more info see docs.battlesnake.com
 
-use crate::{coord_utils::Coord, local_planner::local_planner, move_utils::Move};
+use crate::{
+    coord_utils::Coord, local_planner::local_planner, move_utils::Move, print_util::print_board,
+};
 use log::info;
 use pathfinding::prelude::astar;
 use serde_json::{json, Value};
@@ -60,13 +62,14 @@ pub fn get_move(_game: &Game, turn: &i32, _board: &Board, you: &Battlesnake) -> 
             |p| p == food,
         )
     });
-    
+
     match path {
         Some(res) => {
-            println!("Pfad ist: {:?}", res);
-            let next_coord = &res.0[1];
+            let (coord_vec, _) = res;
 
-            let next_move = local_planner(p, next_coord);
+            let next_move = local_planner(p, &coord_vec[0]);
+
+            print_board(_board, you, &coord_vec);
 
             info!("MOVE {}: {}", turn, next_move);
             return json!({ "move": next_move });

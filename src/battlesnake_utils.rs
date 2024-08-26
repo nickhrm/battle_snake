@@ -14,8 +14,6 @@ pub struct Battlesnake {
     pub shout: Option<String>,
 }
 
-
-
 impl Battlesnake {
     pub fn get_direction(&self) -> Move {
         let neck = &self.body[0];
@@ -57,7 +55,6 @@ impl Battlesnake {
     pub fn next_rounds_snake(&self, you_length: i32, food: Vec<Coord>) -> Battlesnake {
         let mut new_snake = self.clone();
 
-
         match self.get_reachable_apple(food) {
             Some(apple_pos) => {
                 if self.length >= you_length {
@@ -69,8 +66,7 @@ impl Battlesnake {
                 new_snake.body.pop();
                 new_snake.body.push(self.head);
                 if self.length >= you_length {
-                    new_snake
-                        .head = self.head.get_next(&self.get_direction())
+                    new_snake.head = self.head.get_next(&self.get_direction())
                 }
             }
         }
