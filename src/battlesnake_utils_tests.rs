@@ -9,7 +9,7 @@ mod tests {
         let moving_left = Battlesnake {
             id: "1".to_string(),
             head: Coord { x: 5, y: 5 },
-            body: vec![Coord { x: 6, y: 5 }],
+            body: vec![Coord { x: 5, y: 5 }, Coord { x: 6, y: 5 }],
             health: 1,
             latency: "1".to_string(),
             length: 1,
@@ -19,7 +19,7 @@ mod tests {
         let moving_up = Battlesnake {
             id: "1".to_string(),
             head: Coord { x: 5, y: 5 },
-            body: vec![Coord { x: 5, y: 4 }],
+            body: vec![Coord { x: 5, y: 5 }, Coord { x: 5, y: 4 }],
             health: 1,
             latency: "1".to_string(),
             length: 1,
@@ -39,7 +39,7 @@ mod tests {
         let snake = Battlesnake {
             id: "1".to_string(),
             head: Coord { x: 5, y: 5 },
-            body: vec![Coord { x: 6, y: 5 }],
+            body: vec![Coord { x: 5, y: 5 }, Coord { x: 6, y: 5 }],
             health: 1,
             latency: "1".to_string(),
             length: 1,
@@ -57,7 +57,7 @@ mod tests {
         let last_round_snake = Battlesnake {
             id: "1".to_string(),
             head: Coord { x: 5, y: 5 },
-            body: vec![Coord { x: 6, y: 5 }],
+            body: vec![Coord { x: 5, y: 5 }, Coord { x: 6, y: 5 }],
             health: 1,
             latency: "1".to_string(),
             length: 20,
@@ -70,7 +70,7 @@ mod tests {
         let next_rounds_snake_can_reach_apple = Battlesnake {
             id: "1".to_string(),
             head: Coord { x: 5, y: 6 },
-            body: vec![Coord { x: 5, y: 5 }, Coord { x: 6, y: 5 }],
+            body: vec![Coord { x: 5, y: 6 }, Coord { x: 5, y: 5 }, Coord { x: 6, y: 5 }],
             health: 1,
             latency: "1".to_string(),
             length: 20,
@@ -81,7 +81,7 @@ mod tests {
         let next_rounds_snake_cannot_reach_apple = Battlesnake {
             id: "1".to_string(),
             head: Coord { x: 4, y: 5 },
-            body: vec![Coord { x: 5, y: 5 }],
+            body: vec![Coord { x: 4, y: 5 }, Coord { x: 5, y: 5 }],
             health: 1,
             latency: "1".to_string(),
             length: 20,

@@ -16,13 +16,13 @@ pub struct Battlesnake {
 
 impl Battlesnake {
     pub fn get_direction(&self) -> Move {
-        let neck = &self.body[0];
+        let neck = &self.body[1];
 
         let moves = vec![Move::Left, Move::Right, Move::Up, Move::Down];
 
         for mov in &moves {
             if neck.get_next(mov) == self.head {
-                return mov.clone();
+                return   mov.clone();
             }
         }
         Move::Down
@@ -60,12 +60,11 @@ impl Battlesnake {
                 if self.length >= you_length {
                     new_snake.head = apple_pos;
                     new_snake.body.insert(0, apple_pos);
-                    new_snake.body.insert(1, self.head);
+                  
                 }
             }
             None => {
                 new_snake.body.pop();
-                new_snake.body.push(self.head);
                 if self.length >= you_length {
                     new_snake.head = self.head.get_next(&self.get_direction());
                     new_snake.body.insert(0, self.head.get_next(&self.get_direction()));
