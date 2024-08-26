@@ -1,4 +1,4 @@
-use crate::{battlesnake_utils::Battlesnake, coord_utils::Coord, Board, GameState};
+use crate::{battlesnake::Battlesnake, coord::Coord, Board, GameState};
 
 pub fn print_board(board: &Board, you: &Battlesnake, path: &Vec<Coord>) {
     let mut board_vec = vec![vec!['.'; board.width as usize]; board.height as usize];
@@ -26,7 +26,6 @@ pub fn print_board(board: &Board, you: &Battlesnake, path: &Vec<Coord>) {
         board_vec[coord.y as usize][coord.x as usize] = 'y';
     }
     board_vec[you.head.y as usize][you.head.x as usize] = 'Y';
-
 
     for (i, pos) in path.iter().enumerate() {
         let symb = if i == path.len() - 1 { 'P' } else { 'p' };

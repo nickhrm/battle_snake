@@ -1,20 +1,20 @@
 use pathfinding::prelude::astar;
 
-use crate::{battlesnake_utils::Battlesnake, coord_utils::Coord, Board};
+use crate::{battlesnake::Battlesnake, coord::Coord, Board};
 
-
-
-
-fn goal_planner(food:Vec<Coord>, you: &Battlesnake, _board: &Board) -> Coord {
+pub fn goal_planner(food: Vec<Coord>, you: &Battlesnake, board: &Board) -> Vec<Coord> {
     let mut sorted_food = food.clone();
-    sorted_food.sort_by(|a,b|a.distance(&you.head).cmp(&b.distance(&you.head)) );
+    sorted_food.sort_by(|a, b| a.distance(&you.head).cmp(&b.distance(&you.head)));
+
+
+    println!("{:?}", sorted_food);
 
     let p = &you.head;
 
     let path_to_food: Option<(Vec<Coord>, u32)> = sorted_food.iter().find_map(|food| {
         astar(
             p,
-            |p| p.successors(_board, you),
+            |p| p.successors(board),
             |p| p.distance(food),
             |p| p == food,
         )
@@ -24,15 +24,13 @@ fn goal_planner(food:Vec<Coord>, you: &Battlesnake, _board: &Board) -> Coord {
         Some(path) => {
             let (mut coord_vec, _) = path;
             coord_vec.remove(0);
-            coord_vec[0]
-        },  
+            println!("Path: {:?}", coord_vec);
+            coord_vec
+        }
         None => {
-            let path = you.head.successors(_board, you);
-            path[0].0
+            println!("Didnt find path to food. Choosing random");
+            let path = you.head.successors(board);
+            vec![path[0].0]
         }
     }
-
-
-    
-
 }

@@ -1,8 +1,8 @@
 #[macro_use]
 extern crate rocket;
 
-use battlesnake_utils::Battlesnake;
-use coord_utils::Coord;
+use battlesnake::Battlesnake;
+use coord::Coord;
 use log::info;
 use rocket::fairing::AdHoc;
 use rocket::http::Status;
@@ -12,14 +12,14 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::env;
 
-mod battlesnake_utils;
-mod battlesnake_utils_tests;
-mod coord_utils;
+mod battlesnake;
+mod battlesnake_tests;
+mod coord;
+mod goal_planner;
 mod local_planner;
 mod logic;
-mod move_utils;
-mod print_util;
-mod goal_planner;
+mod r#move;
+mod print;
 
 // API and Response Objects
 // See https://docs.battlesnake.com/api
@@ -36,7 +36,7 @@ pub struct Board {
     height: u32,
     width: i32,
     food: Vec<Coord>,
-    snakes: Vec<Battlesnake>,
+    pub snakes: Vec<Battlesnake>,
     hazards: Vec<Coord>,
 }
 

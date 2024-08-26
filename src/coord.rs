@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{move_utils::Move, Battlesnake, Board};
+use crate::{r#move::Move, Battlesnake, Board};
 
 #[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct Coord {
@@ -30,7 +30,7 @@ impl Coord {
         }
     }
 
-    pub fn successors(&self, board: &Board, you: &Battlesnake) -> Vec<(Coord, u32)> {
+    pub fn successors(&self, board: &Board) -> Vec<(Coord, u32)> {
         let mut all_moves = vec![
             self.get_next(&Move::Left),
             self.get_next(&Move::Right),
@@ -38,16 +38,10 @@ impl Coord {
             self.get_next(&Move::Down),
         ];
 
-        //calculate the real next snakes
-        let real_snakes: Vec<Battlesnake> = board
-            .snakes
-            .iter()
-            .map(|snake| snake.next_rounds_snake(you.length, board.food.clone()))
-            .collect();
 
         //prevent collision with other snakes and myself
         all_moves.retain(|future_coord| {
-            !real_snakes
+            !board.snakes
                 .iter()
                 .any(|snake| snake.body.iter().any(|coord| future_coord == coord))
         });

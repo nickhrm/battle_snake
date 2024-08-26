@@ -1,4 +1,4 @@
-use crate::{coord_utils::Coord, move_utils::Move};
+use crate::{coord::Coord, r#move::Move};
 
 pub fn local_planner(current_pos: &Coord, next_pos: &Coord) -> Move {
     if next_pos.x > current_pos.x {

@@ -11,7 +11,8 @@
 // For more info see docs.battlesnake.com
 
 use crate::{
-    coord_utils::Coord, goal_planner::goal_planner, local_planner::local_planner, move_utils::Move, print_util::print_board
+    coord::Coord, goal_planner::goal_planner, local_planner::local_planner, r#move::Move,
+    print::print_board,
 };
 use log::info;
 use serde_json::{json, Value};
@@ -46,31 +47,22 @@ pub fn end(_game: &Game, _turn: &i32, _board: &Board, _you: &Battlesnake) {
 // move is called on every turn and returns your next move
 // Valid moves are "up", "down", "left", or "right"
 // See https://docs.battlesnake.com/api/example-move for available data
-pub fn get_move(_game: &Game, turn: &i32, _board: &Board, you: &Battlesnake) -> Value {
-    println!("w: {},h: {}", _board.width, _board.height);
+pub fn get_move(_game: &Game, turn: &i32, board: &Board, you: &Battlesnake) -> Value {
 
     let p: &Coord = &you.body[0]; // Coordinates of your head
-    let goal: &Coord = &_board.food[0];
 
-    println!("Goal: {:?}, Current Pos: {:?}", goal, p);
-    let path: Vec<Coord> = goal_planner(_board.food, you,_board);
-    
-            let next_move = local_planner(p, &path);
-            
+    let mut new_board = board.clone();
 
-            let mut new_board = _board.clone();
+    new_board.snakes = new_board.snakes.iter().map(|s| s.next_rounds_snake(board.food.clone(), you)).collect();
 
-            new_board.snakes = new_board.snakes.iter().map(|snake| snake.next_rounds_snake(you.length, _board.food.clone())).collect();
+    let path: Vec<Coord> = goal_planner(board.food.clone(), you, board);
 
-            print_board(_board, you, &coord_vec);
-            println!("New snakes");
-            print_board(&new_board, you, &coord_vec);
+    let next_move = local_planner(p, &path[0]);
 
+   
+    print_board(&new_board, you, &path);
+    println!("New snakes");
 
-            info!("MOVE {}: {}", turn, next_move);
-            return json!({ "move": next_move });
-
-
-    
-    }
+    info!("MOVE {}: {}", turn, next_move);
+    return json!({ "move": next_move });
 }
