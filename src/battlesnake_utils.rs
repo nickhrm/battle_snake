@@ -59,14 +59,16 @@ impl Battlesnake {
             Some(apple_pos) => {
                 if self.length >= you_length {
                     new_snake.head = apple_pos;
-                    new_snake.body.insert(0, self.head);
+                    new_snake.body.insert(0, apple_pos);
+                    new_snake.body.insert(1, self.head);
                 }
             }
             None => {
                 new_snake.body.pop();
                 new_snake.body.push(self.head);
                 if self.length >= you_length {
-                    new_snake.head = self.head.get_next(&self.get_direction())
+                    new_snake.head = self.head.get_next(&self.get_direction());
+                    new_snake.body.insert(0, self.head.get_next(&self.get_direction()));
                 }
             }
         }
