@@ -15,17 +15,18 @@ pub fn print_board(board: &Board, you: &Battlesnake, path: &Vec<Coord>) {
 
     // Place snakes on the board
     for snake in &board.snakes {
-        board_vec[snake.head.y as usize][snake.head.x as usize] = 'S';
         for coord in snake.body.iter() {
             board_vec[coord.y as usize][coord.x as usize] = 's';
         }
+        board_vec[snake.head.y as usize][snake.head.x as usize] = 'S';
     }
 
     //print myself
-    board_vec[you.head.y as usize][you.head.x as usize] = 'Y';
     for coord in you.body.iter() {
         board_vec[coord.y as usize][coord.x as usize] = 'y';
     }
+    board_vec[you.head.y as usize][you.head.x as usize] = 'Y';
+
 
     for (i, pos) in path.iter().enumerate() {
         let symb = if i == path.len() - 1 { 'P' } else { 'p' };
