@@ -69,9 +69,17 @@ pub fn get_move(_game: &Game, turn: &i32, _board: &Board, you: &Battlesnake) -> 
             coord_vec.remove(0);
 
             let next_move = local_planner(p, &coord_vec[0]);
-
-            println!("{:?}", you);
+            
             print_board(_board, you, &coord_vec);
+
+            let mut new_board = _board.clone();
+
+            new_board.snakes = new_board.snakes.iter().map(|snake| snake.next_rounds_snake(you.length, _board.food.clone())).collect();
+
+            print_board(_board, you, &coord_vec);
+            println!("New snakes");
+            print_board(&new_board, you, &coord_vec);
+
 
             info!("MOVE {}: {}", turn, next_move);
             return json!({ "move": next_move });
