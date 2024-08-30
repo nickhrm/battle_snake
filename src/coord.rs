@@ -30,7 +30,7 @@ impl Coord {
         }
     }
 
-    pub fn successors(&self, board: &Board) -> Vec<(Coord, u32)> {
+    pub fn successors(&self, board: &Board, danger_matrix: Vec<(Coord, u32)>) -> Vec<(Coord, u32)> {
         let mut all_moves = vec![
             self.get_next(&Move::Left),
             self.get_next(&Move::Right),
@@ -65,7 +65,11 @@ impl Coord {
             true
         });
 
-        all_moves.into_iter().map(|p| (p, 1)).collect()
+
+
+
+        all_moves.into_iter().map(|p| (p, danger_matrix.iter().find(|e| e.0 == p)).1)
+
     }
 
     pub fn distance(&self, other: &Coord) -> u32 {

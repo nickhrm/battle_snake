@@ -50,7 +50,7 @@ pub fn get_move(_game: &Game, turn: &i32, board: &Board, you: &Battlesnake) -> V
 
     let p: &Coord = &you.body[0]; // Coordinates of your head
 
-    danger_matrix(board, you);
+
     
     let path: Vec<Coord> = goal_planner(board.food.clone(), you, board);
 

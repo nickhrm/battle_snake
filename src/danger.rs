@@ -2,12 +2,12 @@ use std::convert::TryInto;
 
 use crate::{battlesnake::Battlesnake, coord::Coord, r#move::Move, Board};
 
-pub fn danger_matrix(board: &Board, you: &Battlesnake) -> Vec<(Coord, i32)> {
+pub fn danger_matrix(board: &Board, you: &Battlesnake) -> Vec<(Coord, u32)> {
     let mut matrix = vec![];
 
     for x in 0..board.width {
         for y in 0..board.height {
-            matrix.push((Coord { x, y: y.try_into().unwrap() }, 0));
+            matrix.push((Coord { x, y: y.try_into().unwrap() }, 20));
         }
     }
 
@@ -28,7 +28,7 @@ pub fn danger_matrix(board: &Board, you: &Battlesnake) -> Vec<(Coord, i32)> {
         for pos in snakes_next_positions.into_iter() {
             for val in matrix.iter_mut() { 
                 if pos == val.0 {
-                    val.1 -= 100;
+                    val.1 += 100;
                     println!("Changing value");
                 }
             }

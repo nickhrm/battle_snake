@@ -46,33 +46,5 @@ impl Battlesnake {
         new_snake
     }
 
-    pub fn next_rounds_snake(&self, food: Vec<Coord>, you: &Battlesnake) -> Battlesnake {
-        if self.id == you.id {
-            return self.clone();
-        }
-        let mut new_snake = self.clone();
-
-
-
-        match self.get_reachable_apple(food) {
-            Some(apple_pos) => {
-                if self.length >= you.length {
-                    new_snake.head = apple_pos;
-                    new_snake.body.insert(0, apple_pos);
-                }
-            }
-            None => {
-                new_snake.body.pop();
-                if self.length >= you.length {
-                    new_snake.head = self.head.get_next(&self.get_direction());
-                    new_snake
-                        .body
-                        .insert(0, self.head.get_next(&self.get_direction()));
-                }
-            }
-        }
-
-        new_snake
-        
-    }
+    
 }
