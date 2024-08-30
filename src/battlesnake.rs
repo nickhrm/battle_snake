@@ -72,7 +72,6 @@ impl Battlesnake {
             }
         }
 
-        println!("NEw Snake: {:?}", new_snake);
         new_snake
         
     }

@@ -7,7 +7,6 @@ pub fn goal_planner(food: Vec<Coord>, you: &Battlesnake, board: &Board) -> Vec<C
     sorted_food.sort_by_key(|a| a.distance(&you.head));
 
 
-    println!("{:?}", sorted_food);
 
     let p = &you.head;
 
@@ -24,7 +23,6 @@ pub fn goal_planner(food: Vec<Coord>, you: &Battlesnake, board: &Board) -> Vec<C
         Some(path) => {
             let (mut coord_vec, _) = path;
             coord_vec.remove(0);
-            println!("Path: {:?}", coord_vec);
             coord_vec
         }
         None => {

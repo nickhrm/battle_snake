@@ -20,6 +20,7 @@ mod local_planner;
 mod logic;
 mod r#move;
 mod print;
+mod danger;
 
 // API and Response Objects
 // See https://docs.battlesnake.com/api

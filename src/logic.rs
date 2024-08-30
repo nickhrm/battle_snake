@@ -11,8 +11,7 @@
 // For more info see docs.battlesnake.com
 
 use crate::{
-    coord::Coord, goal_planner::goal_planner, local_planner::local_planner,
-    print::print_board,
+    coord::Coord, danger::danger_matrix, goal_planner::goal_planner, local_planner::local_planner, print::print_board
 };
 use log::info;
 use serde_json::{json, Value};
@@ -51,14 +50,14 @@ pub fn get_move(_game: &Game, turn: &i32, board: &Board, you: &Battlesnake) -> V
 
     let p: &Coord = &you.body[0]; // Coordinates of your head
 
-
+    danger_matrix(board, you);
+    
     let path: Vec<Coord> = goal_planner(board.food.clone(), you, board);
 
     let next_move = local_planner(p, &path[0]);
 
    
     print_board(board, you, &path);
-    println!("New snakes");
 
     info!("MOVE {}: {}", turn, next_move);
     json!({ "move": next_move })
