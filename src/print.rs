@@ -1,4 +1,4 @@
-use crate::{battlesnake::Battlesnake, coord::Coord, Board, GameState};
+use crate::{battlesnake::Battlesnake, coord::Coord, Board};
 
 pub fn print_board(board: &Board, you: &Battlesnake, path: &Vec<Coord>) {
     let mut board_vec = vec![vec!['.'; board.width as usize]; board.height as usize];

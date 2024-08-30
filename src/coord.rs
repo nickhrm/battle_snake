@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{r#move::Move, Battlesnake, Board};
+use crate::{r#move::Move, Board};
 
 #[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct Coord {
@@ -62,13 +62,13 @@ impl Coord {
             if future_coord.y >= board_height as i32 {
                 return false;
             }
-            return true;
+            true
         });
 
-        return all_moves.into_iter().map(|p| (p, 1)).collect();
+        all_moves.into_iter().map(|p| (p, 1)).collect()
     }
 
     pub fn distance(&self, other: &Coord) -> u32 {
-        (self.x.abs_diff(other.x) + self.y.abs_diff(other.y)) as u32
+        self.x.abs_diff(other.x) + self.y.abs_diff(other.y)
     }
 }

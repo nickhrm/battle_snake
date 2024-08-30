@@ -11,7 +11,7 @@
 // For more info see docs.battlesnake.com
 
 use crate::{
-    coord::Coord, goal_planner::goal_planner, local_planner::local_planner, r#move::Move,
+    coord::Coord, goal_planner::goal_planner, local_planner::local_planner,
     print::print_board,
 };
 use log::info;
@@ -25,13 +25,13 @@ use crate::{Battlesnake, Board, Game};
 pub fn info() -> Value {
     info!("INFO");
 
-    return json!({
+    json!({
         "apiversion": "1",
         "author": "", // TODO: Your Battlesnake Username
         "color": "#ff5f3b", // TODO: Choose color
         "head": "default", // TODO: Choose head
         "tail": "default", // TODO: Choose tail
-    });
+    })
 }
 
 // start is called when your Battlesnake begins a game
@@ -51,18 +51,15 @@ pub fn get_move(_game: &Game, turn: &i32, board: &Board, you: &Battlesnake) -> V
 
     let p: &Coord = &you.body[0]; // Coordinates of your head
 
-    let mut new_board = board.clone();
-
-    new_board.snakes = new_board.snakes.iter().map(|s| s.next_rounds_snake(board.food.clone(), you)).collect();
 
     let path: Vec<Coord> = goal_planner(board.food.clone(), you, board);
 
     let next_move = local_planner(p, &path[0]);
 
    
-    print_board(&new_board, you, &path);
+    print_board(board, you, &path);
     println!("New snakes");
 
     info!("MOVE {}: {}", turn, next_move);
-    return json!({ "move": next_move });
+    json!({ "move": next_move })
 }

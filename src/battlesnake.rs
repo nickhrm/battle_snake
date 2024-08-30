@@ -36,13 +36,7 @@ impl Battlesnake {
             self.head.get_next(&Move::Down),
         ];
 
-        for next_head in all_next_heads {
-            if food.contains(&next_head) {
-                return Some(next_head);
-            }
-        }
-
-        None
+        all_next_heads.into_iter().find(|&next_head| food.contains(&next_head))
     }
 
     //Dor wo der Tail aktuell ist, wird zum nächst möglichen Zeitpunkt frei sein

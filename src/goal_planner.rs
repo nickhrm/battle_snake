@@ -4,7 +4,7 @@ use crate::{battlesnake::Battlesnake, coord::Coord, Board};
 
 pub fn goal_planner(food: Vec<Coord>, you: &Battlesnake, board: &Board) -> Vec<Coord> {
     let mut sorted_food = food.clone();
-    sorted_food.sort_by(|a, b| a.distance(&you.head).cmp(&b.distance(&you.head)));
+    sorted_food.sort_by_key(|a| a.distance(&you.head));
 
 
     println!("{:?}", sorted_food);
