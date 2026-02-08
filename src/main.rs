@@ -21,6 +21,7 @@ mod logic;
 mod r#move;
 mod print;
 mod danger;
+mod voronoi;
 
 // API and Response Objects
 // See https://docs.battlesnake.com/api

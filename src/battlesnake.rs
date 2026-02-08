@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
-
 use crate::{coord::Coord, r#move::Move};
-
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct Battlesnake {
     pub id: String,
@@ -48,3 +46,4 @@ impl Battlesnake {
 
     
 }
+
