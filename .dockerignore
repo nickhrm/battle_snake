@@ -4,3 +4,4 @@ tools
 tests
 *.log
 nohup.out
+.claude

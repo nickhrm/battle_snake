@@ -241,6 +241,7 @@ fn voronoi_bb_w<const W: u32>(st: &State, hazard_value: f32) -> Voronoi {
         col_last |= 1u128 << (y * w + w - 1);
     }
     let not_col0 = full & !col0;
+    
     let not_col_last = full & !col_last;
     let expand = |b: u128| -> u128 {
         ((b << w) & full) | (b >> w) | ((b >> 1) & not_col_last) | ((b << 1) & not_col0)

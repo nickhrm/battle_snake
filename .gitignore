@@ -1,3 +1,4 @@
 /target
 *.log
 nohup.out
+.claude/settings.local.json

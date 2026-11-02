@@ -28,6 +28,109 @@ struct Player {
     ms: u64,
     /// simple heuristic snake instead of the search (sparring partner)
     greedy: bool,
+    /// external snake server (e.g. "127.0.0.1:5001"), queried like the real engine does
+    http: Option<String>,
+}
+
+fn mode_names(mode: Mode) -> (&'static str, &'static str) {
+    match mode {
+        Mode::Duel | Mode::Standard => ("standard", "standard"),
+        Mode::Royale => ("royale", "royale"),
+        Mode::Constrictor => ("constrictor", "standard"),
+    }
+}
+
+/// Engine-compatible JSON for snake `you` (index in `st.snakes`).
+fn engine_json(st: &State, you: usize, mode: Mode, game_id: &str, timeout: u64) -> String {
+    use serde_json::json;
+    let r = &*st.rules;
+    let c = |cell: u16| {
+        let (x, y) = r.xy(cell);
+        json!({"x": x, "y": y})
+    };
+    let snake = |i: usize| {
+        let s = &st.snakes[i];
+        json!({
+            "id": format!("s{i}"), "name": format!("s{i}"), "health": s.health,
+            "body": s.body.iter().map(|&b| c(b)).collect::<Vec<_>>(),
+            "head": c(s.head()), "length": s.len(), "latency": "0", "shout": "", "squad": "",
+            "customizations": {"color": "#888888", "head": "default", "tail": "default"}
+        })
+    };
+    let (name, map) = mode_names(mode);
+    let hazards: Vec<_> = (0..r.cells() as u16).filter(|&h| r.hazards[h as usize] > 0).map(c).collect();
+    let v = json!({
+        "game": {
+            "id": game_id,
+            "ruleset": {"name": name, "version": "v1.2.3", "settings": {
+                "foodSpawnChance": if mode == Mode::Royale { 20 } else { 15 },
+                "minimumFood": 1, "hazardDamagePerTurn": if mode == Mode::Royale { 14 } else { 0 },
+                "hazardMap": "", "hazardMapAuthor": "",
+                "royale": {"shrinkEveryNTurns": 25},
+                "squad": {"allowBodyCollisions": false, "sharedElimination": false, "sharedHealth": false, "sharedLength": false}
+            }},
+            "map": map, "timeout": timeout, "source": "custom"
+        },
+        "turn": st.turn,
+        "board": {
+            "height": r.height, "width": r.width,
+            "food": st.food.iter().map(|&f| c(f)).collect::<Vec<_>>(),
+            "hazards": hazards,
+            "snakes": (0..st.snakes.len()).filter(|&i| st.snakes[i].alive).map(snake).collect::<Vec<_>>()
+        },
+        "you": snake(you)
+    });
+    v.to_string()
+}
+
+fn http_post(addr: &str, path: &str, body: &str, timeout: Duration) -> Option<String> {
+    use std::io::{Read, Write};
+    let mut s = std::net::TcpStream::connect(addr).ok()?;
+    s.set_read_timeout(Some(timeout)).ok()?;
+    s.set_nodelay(true).ok()?;
+    let req = format!(
+        "POST {path} HTTP/1.1\r\nHost: {addr}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    );
+    s.write_all(req.as_bytes()).ok()?;
+    let mut buf = String::new();
+    s.read_to_string(&mut buf).ok()?;
+    let i = buf.find("\r\n\r\n")?;
+    Some(buf[i + 4..].to_string())
+}
+
+/// Ask an external snake for its move; on timeout/error keep going straight (engine behaviour).
+fn http_move(addr: &str, st: &State, you: usize, mode: Mode, game_id: &str, timeout: u64) -> (Dir, bool) {
+    let s = &st.snakes[you];
+    let straight = {
+        let r = &*st.rules;
+        let (hx, hy) = r.xy(s.head());
+        let (nx, ny) = r.xy(s.body[1]);
+        match (hx - nx, hy - ny) {
+            (0, -1) => Dir::Down,
+            (-1, 0) => Dir::Left,
+            (1, 0) => Dir::Right,
+            _ => Dir::Up,
+        }
+    };
+    let body = engine_json(st, you, mode, game_id, timeout);
+    let t0 = Instant::now();
+    let resp = http_post(addr, "/move", &body, Duration::from_millis(timeout + 200));
+    let late = t0.elapsed() > Duration::from_millis(timeout);
+    let mv = resp.and_then(|b| {
+        let v: serde_json::Value = serde_json::from_str(&b).ok()?;
+        match v.get("move")?.as_str()? {
+            "up" => Some(Dir::Up),
+            "down" => Some(Dir::Down),
+            "left" => Some(Dir::Left),
+            "right" => Some(Dir::Right),
+            _ => None,
+        }
+    });
+    match mv {
+        Some(m) if !late => (m, false),
+        _ => (straight, true),
+    }
 }
 
 /// A typical "decent" heuristic snake: flood fill for space, avoids heads of
@@ -115,6 +218,8 @@ struct Args {
     a: Player,
     b: Player,
     verbose: bool,
+    timeout: u64,
+    dump: Option<String>,
 }
 
 fn parse_weights(s: &str) -> Weights {
@@ -136,9 +241,12 @@ fn parse_args() -> Args {
         },
         ms: 20,
         greedy: false,
+        http: None,
     };
     let mut b = a.clone();
     let mut verbose = false;
+    let mut timeout = 500;
+    let mut dump: Option<String> = None;
     while let Some(k) = it.next() {
         let mut v = || it.next().expect("missing value");
         match k.as_str() {
@@ -164,6 +272,10 @@ fn parse_args() -> Args {
             "--a" => a.cfg.weights = parse_weights(&v()),
             "--b" => b.cfg.weights = parse_weights(&v()),
             "--bgreedy" => b.greedy = true,
+            "--bhttp" => b.http = Some(v()),
+            "--timeout" => timeout = v().parse().unwrap(),
+            "--apar" => a.cfg.parallel = true,
+            "--dump" => dump = Some(v()),
             "--arel" => a.cfg.max_relevant = v().parse().unwrap(),
             "--brel" => b.cfg.max_relevant = v().parse().unwrap(),
             "--adepth" => a.cfg.max_depth = v().parse().unwrap(),
@@ -180,6 +292,8 @@ fn parse_args() -> Args {
         a,
         b,
         verbose,
+        timeout,
+        dump,
     }
 }
 
@@ -334,8 +448,17 @@ fn view(st: &State, i: usize) -> (State, Vec<usize>) {
 }
 
 /// returns index of the winner (None = draw), number of turns
-fn play(players: &[Player], mode: Mode, seed: u64, verbose: bool) -> (Option<usize>, u32) {
+fn play(
+    players: &[Player],
+    mode: Mode,
+    seed: u64,
+    verbose: bool,
+    timeout: u64,
+    timeouts: &AtomicUsize,
+    hist: &mut VecDeque<State>,
+) -> (Option<usize>, u32) {
     let mut w = World::new(mode, players.len(), seed);
+    let game_id = format!("sim-{seed}-{}", rand::random::<u32>());
     let n = players.len();
     loop {
         let alive = w.st.alive_count();
@@ -348,6 +471,10 @@ fn play(players: &[Player], mode: Mode, seed: u64, verbose: bool) -> (Option<usi
         if w.st.turn > 1500 {
             return (None, w.st.turn);
         }
+        hist.push_back(w.st.clone());
+        if hist.len() > 6 {
+            hist.pop_front();
+        }
         let mut moves = vec![Dir::Up; n];
         for i in 0..n {
             if !w.st.snakes[i].alive {
@@ -357,6 +484,14 @@ fn play(players: &[Player], mode: Mode, seed: u64, verbose: bool) -> (Option<usi
             let dl = Instant::now() + Duration::from_millis(players[i].ms);
             if players[i].greedy {
                 moves[i] = greedy_move(&v);
+                continue;
+            }
+            if let Some(addr) = &players[i].http {
+                let (m, to) = http_move(addr, &w.st, i, mode, &game_id, timeout);
+                if to {
+                    timeouts.fetch_add(1, Ordering::Relaxed);
+                }
+                moves[i] = m;
                 continue;
             }
             let r = search(&v, &players[i].cfg, dl);
@@ -382,6 +517,7 @@ fn main() {
         _ => 4,
     };
     let next = AtomicUsize::new(0);
+    let timeouts = AtomicUsize::new(0);
     // results: wins A, wins B, draws, total turns
     let res = Mutex::new((0usize, 0usize, 0usize, 0u64));
     let t0 = Instant::now();
@@ -405,7 +541,24 @@ fn main() {
                     .collect();
                 let is_a: Vec<bool> = (0..n).map(|i| (i % 2 == 0) == a_first).collect();
                 let seed = args.seed.wrapping_mul(1_000_003).wrapping_add(g as u64 / 2);
-                let (winner, turns) = play(&players, args.mode, seed, args.verbose);
+                let mut hist = VecDeque::new();
+                let (winner, turns) = play(&players, args.mode, seed, args.verbose, args.timeout, &timeouts, &mut hist);
+                if let Some(dir) = &args.dump {
+                    // dump the last positions of every A snake that died
+                    let a_won = matches!(winner, Some(wi) if is_a[wi]);
+                    if !a_won {
+                        for (i, &ia) in is_a.iter().enumerate() {
+                            let alive_states: Vec<&State> = hist.iter().filter(|s| s.snakes[i].alive).collect();
+                            if !ia || alive_states.len() == hist.len() {
+                                continue;
+                            }
+                            for (k, st) in alive_states.iter().rev().take(4).enumerate() {
+                                let js = engine_json(st, i, args.mode, &format!("loss-{g}"), args.timeout);
+                                let _ = std::fs::write(format!("{dir}/g{g}_s{i}_m{k}.json"), js);
+                            }
+                        }
+                    }
+                }
                 let mut r = res.lock().unwrap();
                 match winner {
                     Some(wi) if is_a[wi] => r.0 += 1,
@@ -437,4 +590,8 @@ fn main() {
         turns as f64 / total as f64,
         t0.elapsed().as_secs_f64()
     );
+    let to = timeouts.load(Ordering::Relaxed);
+    if to > 0 {
+        println!("external snake timeouts/errors: {to}");
+    }
 }
