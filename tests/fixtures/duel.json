@@ -1,0 +1,10 @@
+{"game":{"id":"test-duel-1","ruleset":{"name":"standard","version":"v1.2.3","settings":{"foodSpawnChance":15,"minimumFood":1,"hazardDamagePerTurn":14}},"map":"standard","timeout":500,"source":"league"},
+"turn":20,
+"board":{"height":11,"width":11,
+"food":[{"x":5,"y":5},{"x":0,"y":10},{"x":8,"y":2}],
+"hazards":[],
+"snakes":[
+ {"id":"me","name":"me","health":80,"body":[{"x":3,"y":3},{"x":3,"y":2},{"x":2,"y":2},{"x":1,"y":2}],"head":{"x":3,"y":3},"length":4,"latency":"0","shout":""},
+ {"id":"op","name":"op","health":70,"body":[{"x":7,"y":7},{"x":7,"y":8},{"x":8,"y":8},{"x":9,"y":8},{"x":9,"y":7}],"head":{"x":7,"y":7},"length":5,"latency":"100","shout":""}
+]},
+"you":{"id":"me","name":"me","health":80,"body":[{"x":3,"y":3},{"x":3,"y":2},{"x":2,"y":2},{"x":1,"y":2}],"head":{"x":3,"y":3},"length":4,"latency":"0","shout":""}}

@@ -1,0 +1,6 @@
+target
+.git
+tools
+tests
+*.log
+nohup.out
