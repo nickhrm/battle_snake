@@ -21,6 +21,10 @@ A competitive [Battlesnake](https://play.battlesnake.com) written in Rust.
   subtracts its own compute time from that to estimate the network overhead per game, then sizes
   the search budget as `timeout - network - safety`.
 
+## Experiment log
+
+Tried approaches, their self-play results and next ideas: [EXPERIMENTS.md](EXPERIMENTS.md).
+
 ## Run locally
 
 ```sh
