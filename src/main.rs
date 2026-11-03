@@ -208,7 +208,7 @@ async fn main() {
         games: Mutex::new(HashMap::new()),
         default_net_ms: env_f64("NET_ESTIMATE_MS", 150.0),
         safety_ms: env_f64("SAFETY_MS", 60.0),
-        max_budget_ms: env_f64("MAX_BUDGET_MS", 420.0),
+        max_budget_ms: env_f64("MAX_BUDGET_MS", 360.0),
         parallel: std::env::var("PARALLEL")
             .map(|v| v != "0")
             .unwrap_or(cores > 1),

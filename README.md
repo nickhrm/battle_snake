@@ -58,7 +58,7 @@ cargo run --release --bin bench -- tests/fixtures/standard.json 300   # search d
 | `PORT`            | `8000`    | HTTP port                                                       |
 | `NET_ESTIMATE_MS` | `150`     | assumed network overhead before the first latency measurement   |
 | `SAFETY_MS`       | `60`      | extra safety margin subtracted from the timeout                 |
-| `MAX_BUDGET_MS`   | `420`     | upper limit for thinking time per move                          |
+| `MAX_BUDGET_MS`   | `360`     | upper limit for thinking time per move                          |
 | `PARALLEL`        | auto      | `0` disables the multi-threaded root search                     |
 | `SNAKE_COLOR`     | `#E8A317` | customization                                                   |
 | `SNAKE_HEAD`      | `evil`    |                                                                 |
