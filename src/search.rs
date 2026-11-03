@@ -7,7 +7,7 @@
 
 use crate::eval::{evaluate, Weights};
 use crate::game::{Dir, State};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
 pub const WIN: f32 = 1_000_000.0;
@@ -23,6 +23,8 @@ pub struct SearchConfig {
     pub max_depth: u32,
     /// max number of opponents that get a full move set at a min node
     pub max_relevant: usize,
+    /// opponents whose head is further away than this (Manhattan) get one heuristic move
+    pub max_reach: i32,
 }
 
 impl Default for SearchConfig {
@@ -32,6 +34,7 @@ impl Default for SearchConfig {
             parallel: true,
             max_depth: 60,
             max_relevant: 3,
+            max_reach: 99,
         }
     }
 }
@@ -60,8 +63,13 @@ struct Ctx<'a> {
     nodes: u64,
     start_opps: usize,
     max_relevant: usize,
+    max_reach: i32,
     killer_me: [u8; MAX_PLY],
     killer_opp: [u32; MAX_PLY],
+    /// best exact root score found so far by any thread (f32 bits), parallel root only
+    shared_alpha: Option<&'a AtomicU32>,
+    /// highest shared alpha this context has used during the current root search
+    alpha_seen: f32,
 }
 
 impl<'a> Ctx<'a> {
@@ -71,6 +79,7 @@ impl<'a> Ctx<'a> {
         stop: &'a AtomicBool,
         start_opps: usize,
         max_relevant: usize,
+        max_reach: i32,
     ) -> Self {
         Ctx {
             w,
@@ -80,8 +89,11 @@ impl<'a> Ctx<'a> {
             nodes: 0,
             start_opps,
             max_relevant,
+            max_reach,
             killer_me: [255; MAX_PLY],
             killer_opp: [u32::MAX; MAX_PLY],
+            shared_alpha: None,
+            alpha_seen: -INF,
         }
     }
 
@@ -223,7 +235,7 @@ impl<'a> Ctx<'a> {
             nc += 1;
         }
         cand[..nc].sort_unstable();
-        let reach = 2 * depth as i32 + 1;
+        let reach = (2 * depth as i32 + 1).min(self.max_reach);
         for (rank, &(d, j)) in cand[..nc].iter().enumerate() {
             idxs[no] = j;
             if d <= reach && rank < self.max_relevant {
@@ -283,7 +295,22 @@ impl<'a> Ctx<'a> {
             }
         }
 
+        let mut alpha = alpha;
         for step in 0..total {
+            if ply == 0 {
+                if let Some(sa) = self.shared_alpha {
+                    let a = f32::from_bits(sa.load(Ordering::Relaxed));
+                    if a > alpha {
+                        alpha = a;
+                    }
+                    if alpha > self.alpha_seen {
+                        self.alpha_seen = alpha;
+                    }
+                    if v <= alpha {
+                        break;
+                    }
+                }
+            }
             let ji = match order_first {
                 Some(f) => {
                     if step == 0 {
@@ -353,12 +380,19 @@ pub fn search(st: &State, cfg: &SearchConfig, deadline: Instant) -> SearchResult
     }
     let start_opps = st.alive_opponents();
     let stop = AtomicBool::new(false);
+    let shared = AtomicU32::new((-INF).to_bits());
     let w = &cfg.weights;
 
     // per root move context (keeps killers across iterations)
     let far = Instant::now() + Duration::from_secs(3600);
     let mut ctxs: Vec<Ctx> = (0..n)
-        .map(|_| Ctx::new(w, far, &stop, start_opps, cfg.max_relevant))
+        .map(|_| {
+            let mut c = Ctx::new(w, far, &stop, start_opps, cfg.max_relevant, cfg.max_reach);
+            if cfg.parallel {
+                c.shared_alpha = Some(&shared);
+            }
+            c
+        })
         .collect();
 
     // order: moves sorted by last iteration's score
@@ -373,17 +407,46 @@ pub fn search(st: &State, cfg: &SearchConfig, deadline: Instant) -> SearchResult
         for c in ctxs.iter_mut() {
             c.deadline = dl;
             c.aborted = false;
+            c.alpha_seen = -INF;
         }
-        let mut res: Vec<Option<f32>> = vec![None; n];
+        shared.store((-INF).to_bits(), Ordering::Relaxed);
+        // (value, exact): non-exact values are upper bounds (the move failed low)
+        let mut res: Vec<Option<(f32, bool)>> = vec![None; n];
 
         if cfg.parallel {
-            let results: Vec<(usize, Option<f32>)> = std::thread::scope(|scope| {
+            let shared = &shared;
+            let results: Vec<(usize, Option<(f32, bool)>)> = std::thread::scope(|scope| {
                 let mut handles = Vec::new();
                 for (i, c) in ctxs.iter_mut().enumerate() {
                     let m = root[i];
                     handles.push(scope.spawn(move || {
-                        let v = c.min_node(st, m, depth, 0, -INF, INF);
-                        (i, if c.aborted { None } else { Some(v) })
+                        // private copy of the rules: every State clone bumps the Arc
+                        // refcount, which would otherwise bounce between cores
+                        let local = State {
+                            rules: std::sync::Arc::new((*st.rules).clone()),
+                            ..st.clone()
+                        };
+                        let v = c.min_node(&local, m, depth, 0, -INF, INF);
+                        if c.aborted {
+                            return (i, None);
+                        }
+                        let exact = v > c.alpha_seen;
+                        if exact {
+                            // raise the shared bound
+                            let mut cur = shared.load(Ordering::Relaxed);
+                            while v > f32::from_bits(cur) {
+                                match shared.compare_exchange_weak(
+                                    cur,
+                                    v.to_bits(),
+                                    Ordering::Relaxed,
+                                    Ordering::Relaxed,
+                                ) {
+                                    Ok(_) => break,
+                                    Err(x) => cur = x,
+                                }
+                            }
+                        }
+                        (i, Some((v, exact)))
                     }));
                 }
                 handles.into_iter().map(|h| h.join().unwrap()).collect()
@@ -400,16 +463,19 @@ pub fn search(st: &State, cfg: &SearchConfig, deadline: Instant) -> SearchResult
                 if c.aborted {
                     break;
                 }
-                res[i] = Some(v);
+                res[i] = Some((v, v > alpha));
                 if v > alpha {
                     alpha = v;
                 }
             }
         }
 
+        // better(a, b): a is preferred over b (higher value; exact wins ties)
+        let better = |a: (f32, bool), b: (f32, bool)| a.0 > b.0 || (a.0 == b.0 && a.1 && !b.1);
+
         let complete = res.iter().all(|r| r.is_some());
         if complete {
-            let scores: Vec<f32> = res.iter().map(|r| r.unwrap()).collect();
+            let scores: Vec<f32> = res.iter().map(|r| r.unwrap().0).collect();
             // In multi-player games a paranoid "everything loses" is mostly an artefact of
             // assuming all opponents cooperate: keep the last iteration that still had hope.
             if start_opps >= 2
@@ -422,7 +488,7 @@ pub fn search(st: &State, cfg: &SearchConfig, deadline: Instant) -> SearchResult
             // best: max score; ties broken by previous iteration
             let mut bi = order[0];
             for &i in &order {
-                if scores[i] > scores[bi] {
+                if better(res[i].unwrap(), res[bi].unwrap()) {
                     bi = i;
                 }
             }
@@ -448,12 +514,13 @@ pub fn search(st: &State, cfg: &SearchConfig, deadline: Instant) -> SearchResult
                 let mut bv = v_prev_best;
                 for i in 0..n {
                     if let Some(v) = res[i] {
-                        if v > bv {
+                        if better(v, bv) {
                             bv = v;
                             bi = i;
                         }
                     }
                 }
+                let mut bv = bv.0;
                 if is_loss(bv) {
                     // our best turned out to lose: prefer an unfinished move that looked fine before
                     let mut alt = None;

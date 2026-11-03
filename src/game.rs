@@ -251,7 +251,8 @@ impl State {
 
     /// Advance the game by one turn. `moves[i]` is used for snake `i` (ignored if dead).
     pub fn advance(&mut self, moves: &[Dir]) {
-        let rules = self.rules.clone();
+        // borrow the rules without touching the Arc's (shared, contended) refcount
+        let rules: &Rules = &self.rules;
         let n = self.snakes.len();
 
         // 1. movement

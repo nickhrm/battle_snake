@@ -34,7 +34,12 @@ pub fn profile(st: &State) -> Weights {
         // duel
         return w;
     }
-    w
+    // multi-player: being pinned to the wall / boxed in by bigger snakes is the main way we die
+    Weights {
+        edge: 3.0,
+        trap: 12.0,
+        ..w
+    }
 }
 
 pub fn config_for(st: &State, parallel: bool) -> SearchConfig {
