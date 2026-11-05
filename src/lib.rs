@@ -31,6 +31,7 @@ pub fn profile(st: &State) -> Weights {
             // the game is decided by territory alone within about 35 turns
             opp_area: 1.0,
             opp_area_sum: 0.3,
+            parity: 0.0,
             ..w
         };
     }

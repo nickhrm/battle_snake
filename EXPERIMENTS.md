@@ -92,7 +92,18 @@ Elo-Werte sind aus Self-Play, Variante (A) gegen die Basis (B). ✅ übernommen,
 | Transposition Table auf Pfad-Hashes zur Zugsortierung | keine Knotenersparnis bis Tiefe 13/8 | ❌ Killer sortieren schon fast perfekt (ca. 1,6 Kinder pro Halbzug). Der Hebel ist die Bewertung. |
 | Gewichte per logistischer Regression aus Arena-Spielen (`src/bin/dataset.rs`) | 60 % Trefferquote im Duell, in 4er-Spielen kollinear und mit kippenden Vorzeichen | ❌ keine brauchbaren Gewichte |
 
-Die Tests aus Runde 3 oberhalb der ersten Zeile liefen noch mit dem Leeres-Brett-Fehler.
+| `parity` 0.5: Schachbrett-Schranke halb auf das Gebiet anrechnen | Duell +25 (1000 Spiele), +12 (40 ms, 400), 4er +25 (800), Royale +16 (500) | ✅ einzeln knapp, zusammen klar positiv |
+| `parity` 1.0 | 4er: −40 | ❌ |
+| Constrictor: `opp_area` 1.0, `opp_area_sum` 0.3 | +68 (1000 Spiele) | ✅ nur Constrictor-Profil |
+| Constrictor: zusätzlich `parity` 1.0 | fällt auf +20 | ❌ |
+| Constrictor: `opp_alive` 0 | −113 | ❌ |
+| `food_owned` 5 | 4er: −17, Duell: −11 | ❌ |
+| `length_each` 8 | 4er: −3 | ❌ |
+| `mutual` −150 / −400 (Kamikaze-Tausch nicht als vollen Verlust werten) | 4er: +5 / +22, Duell: +6 / −17, Royale: −23 | ➖ bleibt aus |
+| `food_dist` 3 auf neuer Basis | 4er: +12, Duell: +26 | ➖ |
+| `hazard_cell` 0.1 / 0.5 | Royale: −12 / −9 | ➖ |
+
+Die Zeilen ab `food_contest`-Gradient bis zur logistischen Regression liefen noch mit dem Leeres-Brett-Fehler, die Tests ab `parity` schon ohne.
 
 ### Runde 2 (2026-11-03): Suche und 4er-Gewichte
 

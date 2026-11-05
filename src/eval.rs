@@ -76,7 +76,7 @@ impl Default for Weights {
             edge: 1.0,
             eat_early: 8.0,
             food_contest: 3.0,
-            parity: 0.0,
+            parity: 0.5,
             food_owned: 0.0,
             length_each: 0.0,
             mutual: 0.0,
