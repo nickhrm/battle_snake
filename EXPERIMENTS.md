@@ -12,6 +12,11 @@ nach jeder Runde ergänzen.** Neueste Einträge oben in jedem Abschnitt.
 Arena-Profil: <https://arena.battlesnake.com/battlesnakes/837dbb1c-2781-4e13-8b33-7d1b9c75f7b1/profile>
 (Spielhistorie mit `?page=N`).
 
+| 2026-11-05 | 52.7 (#21, 40 % Siege, 259 Spiele) | 36.0 (#14, 63 % Siege, 252 Spiele) | vor Runde 3; Royale und Constrictor noch nicht beigetreten |
+
+Die globale Rangliste summiert die beste Wertung pro Leaderboard (fehlendes Board = 0). Mit nur
+zwei von vier Boards liegt die Summe bei 88,7 (#23), die Spitze bei 183,8.
+
 ## Arbeitsablauf
 
 1. **Spiele laden.** Die Arena hat eine Engine-API:
@@ -36,9 +41,20 @@ Arena-Profil: <https://arena.battlesnake.com/battlesnakes/837dbb1c-2781-4e13-8b3
      mit `bench` (Tiefe, Knoten/s) beurteilen.
    - Self-Play misst nur gegen uns selbst. Ob es gegen die echten Gegner hilft, zeigt erst die
      Arena.
+   - `--a`/`--b` überschreiben jetzt das Produktiv-Profil des Modus (`profile()` in `src/lib.rs`).
+   - Sims mit kopiertem Binary starten, dann darf nebenher gebaut werden (mit eigenem
+     `CARGO_TARGET_DIR`). Bei Fehlern, die erst tief wirken, auch mit 40 ms testen.
 
 ## Beobachtungen aus Arena-Spielen
 
+- **2026-11-05 (512 Spiele, Vergleich mit allen Gegnern):**
+  - Erstes Futter im Median bei Zug 10 (4er) bzw. 16 (Duell), bei fast allen Gegnern bei Zug 2.
+    Duell-Länge bei Zug 50: 5,8 gegen 7–9. Self-Play konnte das nie zeigen, beide Seiten
+    hatten denselben Fehler. **Darum immer auch gegen die echten Gegner vergleichen.**
+  - 12 Hungertode in 4er-Spielen, mit Länge 4–7 bei Zug 100–150 und Futter wenige Felder entfernt.
+  - Ursachen: siehe Runde 3. Fast alle `self-collision`-Tode sind Einsperren 5–15 Züge vorher.
+  - Timeouts: 0,05 % der Züge, ähnlich wie bei anderen starken Snakes, jeder vierte betrifft auch
+    den Gegner. Etwa 10 von 170 Niederlagen fielen auf einen Timeout-Zug.
 - **2026-11-03 (137 Spiele, 91 Siege):**
   - Etwa 5 Niederlagen sind genau im Timeout-Zug passiert (die Engine lässt die Schlange dann
     geradeaus fahren, meist in die Wand). Die Latenz lag fast immer bei 430–440 ms bei einem
@@ -59,6 +75,24 @@ Arena-Profil: <https://arena.battlesnake.com/battlesnakes/837dbb1c-2781-4e13-8b3
 
 Elo-Werte sind aus Self-Play, Variante (A) gegen die Basis (B). ✅ übernommen, ❌ verworfen,
 ➖ neutral bzw. nicht übernommen.
+
+### Runde 3 (2026-11-05): Futter
+
+| Änderung | Ergebnis | Status |
+|---|---|---|
+| Leeres Brett ist kein Verhungern (`food_empty`): Die Suche spawnt kein Futter, das letzte Futter zu fressen kostete deshalb −200 und den maximalen Distanz-Malus | 4er: **+301**, Duell: **+142** (10 ms), **+166** (40 ms) | ✅ gegen den Stand mit dem Futter-Gradienten |
+| Gradient auch zu umkämpftem Futter (`food_contest` 3) statt nur zu Voronoi-eigenem | 4er: +110 | ✅ |
+| Bonus fürs frühe Fressen in der Suche (`eat_early` 8, Abfall 0,85 pro Halbzug), gegen Aufschub am Horizont | zusammen mit dem Gradienten 4er: **+153**, Duell: **+110**; allein 4er: +19 | ✅ |
+| `hunger_health` 50 | 4er: −33, Duell: −11 | ❌ |
+| `want_length_lead` 6 | 4er: −19, Duell: +9 | ➖ |
+| `eat_early` 16 | 4er: +12, Duell: +3 | ➖ |
+| `food_contest` 1.5 | 4er: +29, Duell: −12 | ➖ |
+| `food_dist` 3 | 4er: +38, Duell: +2 | ➖ auf neuer Basis nachtesten |
+| Best-Reply-Search (ein Gegner weicht ab statt aller gemeinsamen Antworten) | 4er: −53 | ❌ |
+| Transposition Table auf Pfad-Hashes zur Zugsortierung | keine Knotenersparnis bis Tiefe 13/8 | ❌ Killer sortieren schon fast perfekt (ca. 1,6 Kinder pro Halbzug). Der Hebel ist die Bewertung. |
+| Gewichte per logistischer Regression aus Arena-Spielen (`src/bin/dataset.rs`) | 60 % Trefferquote im Duell, in 4er-Spielen kollinear und mit kippenden Vorzeichen | ❌ keine brauchbaren Gewichte |
+
+Die Tests aus Runde 3 oberhalb der ersten Zeile liefen noch mit dem Leeres-Brett-Fehler.
 
 ### Runde 2 (2026-11-03): Suche und 4er-Gewichte
 

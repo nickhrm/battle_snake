@@ -52,6 +52,9 @@ pub struct Weights {
     /// 0 keeps the full loss. The opponent gives up its own game for it, so a
     /// worst-case search that treats it as certain death flees every equal-length snake.
     pub mutual: f32,
+    /// assumed distance to the next food once the board is empty. The search spawns no
+    /// food, but the rules do, so an empty board must not read as starvation.
+    pub food_empty: f32,
 }
 
 impl Default for Weights {
@@ -77,6 +80,7 @@ impl Default for Weights {
             food_owned: 0.0,
             length_each: 0.0,
             mutual: 0.0,
+            food_empty: 6.0,
         }
     }
 }
@@ -453,16 +457,12 @@ pub fn evaluate(st: &State, w: &Weights) -> f32 {
         // food alone leaves a short snake without any gradient, since longer snakes win ties.
         let fd = vor.food_dist[0];
         let head = me.head();
-        let nearest = if w.food_contest < 0.0 {
-            None
-        } else {
-            st.food.iter().map(|&f| rules.dist(head, f)).min()
-        };
+        let nearest = st.food.iter().map(|&f| rules.dist(head, f)).min();
         let d = match (fd != NONE, nearest) {
             (true, Some(n)) => (fd as f32).min(n as f32 + w.food_contest),
             (true, None) => fd as f32,
             (false, Some(n)) => n as f32 + w.food_contest,
-            (false, None) => (rules.width + rules.height) as f32,
+            (false, None) => w.food_empty,
         };
         let want =
             me.health < w.hunger_health || (opps > 0 && my_len < max_opp_len + w.want_length_lead);
@@ -474,16 +474,9 @@ pub fn evaluate(st: &State, w: &Weights) -> f32 {
             };
             score -= w.food_dist * urgency * d;
         }
-        // impending starvation: no food we can reach in time
-        match nearest {
-            Some(n) if me.health >= n => {}
-            None if w.food_contest < 0.0 => {
-                let need = if fd == NONE { i32::MAX } else { fd as i32 };
-                if me.health < need.min(1000) || (fd == NONE && me.health < 15) {
-                    score -= 200.0;
-                }
-            }
-            _ => score -= 200.0,
+        // impending starvation: the nearest food is out of reach
+        if matches!(nearest, Some(n) if me.health < n) {
+            score -= 200.0;
         }
         score -= w.health * (100 - me.health) as f32;
     }
