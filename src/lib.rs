@@ -35,6 +35,16 @@ pub fn profile(st: &State) -> Weights {
             ..w
         };
     }
+    if st.rules.royale {
+        // the board shrinks and hazard turns cost 15 health, so a snake that waits starves
+        return Weights {
+            edge: 3.0,
+            trap: 12.0,
+            hunger_health: 90,
+            health: 0.3,
+            ..w
+        };
+    }
     if opps <= 1 {
         // duel
         return w;
@@ -52,5 +62,27 @@ pub fn config_for(st: &State, parallel: bool) -> SearchConfig {
         weights: weights_for(st),
         parallel,
         ..SearchConfig::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use api::GameState;
+
+    fn state(map: &str, hazards: &str) -> State {
+        let js = std::fs::read_to_string("tests/fixtures/standard.json").unwrap();
+        let mut v: serde_json::Value = serde_json::from_str(&js).unwrap();
+        v["game"]["map"] = map.into();
+        v["board"]["hazards"] = serde_json::from_str(hazards).unwrap();
+        serde_json::from_value::<GameState>(v).unwrap().to_state()
+    }
+
+    #[test]
+    fn royale_profile_needs_map_or_hazards() {
+        let base = Weights::default().hunger_health;
+        assert_eq!(profile(&state("standard", "[]")).hunger_health, base);
+        assert_eq!(profile(&state("royale", "[]")).hunger_health, 90);
+        assert_eq!(profile(&state("standard", r#"[{"x":0,"y":0}]"#)).hunger_health, 90);
     }
 }

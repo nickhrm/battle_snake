@@ -328,7 +328,8 @@ impl World {
         let mut rng = SmallRng::seed_from_u64(seed);
         let (w, h) = (11, 11);
         let dmg = if mode == Mode::Royale { 14 } else { 0 };
-        let rules = Rules::new(w, h, false, mode == Mode::Constrictor, dmg);
+        let mut rules = Rules::new(w, h, false, mode == Mode::Constrictor, dmg);
+        rules.royale = mode == Mode::Royale;
         let corners = [(1, 1), (1, 9), (9, 1), (9, 9)];
         let cardinals = [(1, 5), (5, 1), (5, 9), (9, 5)];
         let mut pts: Vec<(i32, i32)> = if n <= 4 {

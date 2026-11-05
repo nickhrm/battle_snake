@@ -5,17 +5,26 @@ nach jeder Runde ergänzen.** Neueste Einträge oben in jedem Abschnitt.
 
 ## Stand
 
-| Datum      | Standard 11x11 | Duels 11x11 | Notiz |
-|------------|----------------|-------------|-------|
-| 2026-11-03 | 52.3 (47 % Siege, 93 Spiele) | 36.8 (79 % Siege, 92 Spiele) | vor Runde 1 |
+Vor jedem Deploy eine Zeile mit Wertung und Spielzahl eintragen. Die Wertung läuft träge nach und
+hängt vom Gegnerfeld ab. Für die Bewertung eines Commits zählen deshalb die Spiele **seit** seinem
+Deploy: Siegquote, Platzierung und die Metrik, die er verbessern soll. Self-Play-Elo ist nur die
+Vorhersage. Commits im Abstand von wenigen Stunden lassen sich in der Arena nicht trennen.
+
+| Stand (UTC) | Commit | Standard | Duels | Royale | Constrictor | Notiz |
+|---|---|---|---|---|---|---|
+| 11-03 | vor Runde 1 | 52.3 (93 Spiele) | 36.8 (92) | – | – | |
+| 11-05 ~07:45 | `83f811b` | 52.7 (#21, 259) | 36.0 (#14, 252) | – | – | Runde 2, erstes Futter bei Zug 10/16 |
+| 11-05 08:44 | `95f79b6` deployt | – | – | – | – | Futter-Gradient, `eat_early`; 4er-Erstfutter danach bei Zug 2 |
+| 11-05 10:50 | `4d079b7` deployt | 52.8 (273) | 35.4 (267) | – | – | Leeres-Brett-Fix; Duell-Erstfutter danach bei Zug 2 |
+| 11-05 11:25 | `421b1d9` deployt | – | – | – | – | Constrictor-Profil; Royale und Constrictor kurz zuvor beigetreten |
+| 11-05 11:37 | `36f0069` deployt | 53.0 (274) | 35.4 (269) | 17.4 (3) | 17.0 (3) | `parity` 0.5 |
+| 11-05 13:10 | Messung, kein Deploy | 54.3 (#16, 281) | 35.9 (#15, 274) | in Platzierung (9) | in Platzierung (9) | seit dem Leeres-Brett-Fix: Standard 8/9 Siege, Duel 6/8 |
+| 11-05 15:10 | Basis vor Royale-Profil | 54.2 (#17, 290) | 37.2 (#12, 283) | 28.0 (#17, 17) | 18.7 (#21, 18) | zum Vergleich nach dem Deploy; Metriken: Hungertode, Platzierung im Royale |
+
+Die globale Rangliste summiert die beste Wertung pro Leaderboard (fehlendes Board = 0).
 
 Arena-Profil: <https://arena.battlesnake.com/battlesnakes/837dbb1c-2781-4e13-8b33-7d1b9c75f7b1/profile>
 (Spielhistorie mit `?page=N`).
-
-| 2026-11-05 | 52.7 (#21, 40 % Siege, 259 Spiele) | 36.0 (#14, 63 % Siege, 252 Spiele) | vor Runde 3; Royale und Constrictor noch nicht beigetreten |
-
-Die globale Rangliste summiert die beste Wertung pro Leaderboard (fehlendes Board = 0). Mit nur
-zwei von vier Boards liegt die Summe bei 88,7 (#23), die Spitze bei 183,8.
 
 ## Arbeitsablauf
 
@@ -76,6 +85,54 @@ zwei von vier Boards liegt die Summe bei 88,7 (#23), die Spitze bei 183,8.
 Elo-Werte sind aus Self-Play, Variante (A) gegen die Basis (B). ✅ übernommen, ❌ verworfen,
 ➖ neutral bzw. nicht übernommen.
 
+### Runde 4 (2026-11-05): Hypothesen aus den Spielen der Top-Snakes
+
+Vergleich unserer Suche mit 434 Spielen der Spitze (`src/bin/agree.rs`): Wir stimmen in etwa 60 %
+der Züge überein, etwa 5 % sind große Abweichungen. Muster dort: Die Spitze lässt Futter bei hoher
+Gesundheit liegen (HP > 50 in 93 %, Median-Zug ~350, unabhängig vom Längenvorsprung), jagt kleinere
+Köpfe häufiger, läuft öfter zum eigenen Schwanz und im Royale öfter zur Mitte. Die Muster stammen aus
+Spielen gegen stärkere Gegner, Self-Play kann sie also nur begrenzt bestätigen.
+
+Self-Play bei 10 ms gegen die Basis, 500 Spiele Duell, je 400 Spiele Standard und Royale. Rauschen
+etwa ±35. Alle Gewichte wurden wieder entfernt.
+
+| Variante | Duell | Standard | Royale | Ergebnis |
+|---|---|---|---|---|
+| `want_length_lead` 2 | +8 | −2 | | ➖ |
+| Längen-Term bei Vorsprung × 0.3 | −1 | −10 | | ➖ |
+| Eat-Bonus nur bei Bedarf | +4 | +9 | | ➖ |
+| beides zusammen | −8 | +23 | | ➖ |
+| Jagd 5 pro kleinerem Kopf in Distanz ≤ 2 | +4 | −5 | +3 | ➖ |
+| Jagd 12 | +5 | +4 | | ➖ |
+| Abstand zum eigenen Schwanz 0.5 | +10 | −17 | | ➖ |
+| Mitte 1 | −29 | +3 | −11 | ➖ |
+| Mitte 2.5 | | | −10 | ➖ |
+
+Arena-Partie `6022c965` (Royale): Hungertod in Zug 74 bei Länge 4, obwohl Futter lag. Die Züge lagen nur
+0,2 Punkte auseinander, auch der Schritt in die Gefahrenzone. Daraus entstand ein eigenes
+Royale-Profil, gegen die Basis:
+
+| Variante | Royale | Status |
+|---|---|---|
+| `hunger_health` 50 / 70 | +14 / +62 (je 400) | Tendenz |
+| `health` 0.3 / 0.6 | +34 / +47 (je 400) | Tendenz |
+| `food_dist` 3 | +23 (400) | ➖ |
+| `health` 0.3 + `hunger_health` 50 / 70 | +27 / +23 (je 800) | |
+| `health` 0.6 / 1.0 + `hunger_health` 70 | +44 / +47 (je 800) | |
+| `health` 0.3 + `hunger_health` 101 | +44 (800) | |
+| `hunger_health` 90 mit `health` 0.02 / 0.1 / 0.3 / 0.6 | +50 / +49 / +65 / +29 (je 800) | |
+| `health` 0.3 + `hunger_health` 90 + `food_dist` 3 | +40 (800) | ➖ |
+| **Fertiges Profil `health` 0.3, `hunger_health` 90, gegen den alten Stand, 40 ms** | **+58** (400) | ✅ nur Royale |
+
+Erkennung: `game.map == "royale"` oder Gefahrenfelder auf dem Brett. Die Einstellung
+`shrinkEveryNTurns` nutzen wir nicht: Der Simulator sendet sie in jedem Modus, und für die echten
+Arena-Anfragen ist das nicht geprüft. Für
+Standard und Duell brachte `hunger_health` 50 in Runde 3 nichts.
+
+Constrictor, Kopf-an-Kopf-Tausch statt Niederlage (`mutual`): −150 zuerst +27 (600 Spiele), dann
+−34 (3000 Spiele); −250 / −600 / −2000: +6 / +10 / +3 (je 3000). ❌ Lehre: Ein Ausreißer in 600
+Spielen trägt keine Entscheidung, also immer mit neuem Seed und mehr Spielen wiederholen.
+
 ### Runde 3 (2026-11-05): Futter
 
 | Änderung | Ergebnis | Status |
@@ -118,7 +175,7 @@ Die Zeilen ab `food_contest`-Gradient bis zur logistischen Regression liefen noc
 | `max_relevant` 3 → 2 (nur 2 Gegner voll durchrechnen) | 4er: +3 | ➖ |
 | Reichweite der Gegner begrenzen (`max_reach` 5 / 7) | 4er: −133 / −61 | ❌ deutlich schlechter. Weit entfernte Gegner müssen voll mitgerechnet werden. |
 
-### Runde 1 (2026-11-03): Timeouts und Länge
+### Runde 1 (2026-11-03): Timeouts und Länge 
 
 | Änderung | Ergebnis | Status |
 |---|---|---|

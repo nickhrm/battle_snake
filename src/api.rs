@@ -116,6 +116,8 @@ impl GameState {
         let h = self.board.height.max(1);
         let dmg = self.game.ruleset.settings.hazard_damage_per_turn;
         let mut rules = Rules::new(w, h, self.is_wrapped(), self.is_constrictor(), dmg);
+        // not shrinkEveryNTurns: our sim sends it in every mode, and the engine may do the same
+        rules.royale = self.game.map == "royale" || !self.board.hazards.is_empty();
         let inb = |c: &Coord| c.x >= 0 && c.y >= 0 && c.x < w && c.y < h;
         for c in self.board.hazards.iter().filter(|c| inb(c)) {
             let i = rules.cell(c.x, c.y) as usize;

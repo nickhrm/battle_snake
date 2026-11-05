@@ -41,6 +41,8 @@ pub struct Rules {
     pub height: i32,
     pub wrapped: bool,
     pub constrictor: bool,
+    /// shrinking board; hazards can be absent during the first turns
+    pub royale: bool,
     pub hazard_damage: i32,
     /// number of stacked hazards on each cell
     pub hazards: Vec<u8>,
@@ -90,6 +92,7 @@ impl Rules {
             height,
             wrapped,
             constrictor,
+            royale: false,
             hazard_damage,
             hazards: vec![0; cells],
             hazard_bb: 0,

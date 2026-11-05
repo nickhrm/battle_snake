@@ -25,6 +25,8 @@ pub struct SearchConfig {
     pub max_relevant: usize,
     /// opponents whose head is further away than this (Manhattan) get one heuristic move
     pub max_reach: i32,
+    /// sequential only: search every root move with a full window, for analysis
+    pub exact_root: bool,
 }
 
 impl Default for SearchConfig {
@@ -35,6 +37,7 @@ impl Default for SearchConfig {
             max_depth: 60,
             max_relevant: 3,
             max_reach: 99,
+            exact_root: false,
         }
     }
 }
@@ -491,7 +494,7 @@ pub fn search(st: &State, cfg: &SearchConfig, deadline: Instant) -> SearchResult
                     break;
                 }
                 res[i] = Some((v, v > alpha));
-                if v > alpha {
+                if v > alpha && !cfg.exact_root {
                     alpha = v;
                 }
             }
