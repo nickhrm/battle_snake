@@ -72,6 +72,9 @@ struct Ctx<'a> {
     alpha_seen: f32,
 }
 
+/// Decay per ply of the eating bonus.
+const EAT_DECAY: f32 = 0.85;
+
 impl<'a> Ctx<'a> {
     fn new(
         w: &'a Weights,
@@ -109,10 +112,19 @@ impl<'a> Ctx<'a> {
     }
 
     #[inline]
-    fn terminal(&self, st: &State, ply: usize) -> Option<f32> {
+    fn terminal(&self, parent: &State, st: &State, ply: usize) -> Option<f32> {
         if !st.snakes[0].alive {
             if self.start_opps > 0 && st.alive_count() == 0 {
                 return Some(DRAW + ply as f32 * 10.0);
+            }
+            if self.w.mutual != 0.0 {
+                let head = st.snakes[0].head();
+                let traded = (1..st.snakes.len()).any(|j| {
+                    !st.snakes[j].alive && parent.snakes[j].alive && st.snakes[j].head() == head
+                });
+                if traded {
+                    return Some(self.w.mutual + ply as f32);
+                }
             }
             return Some(LOSS + ply as f32 * 10.0);
         }
@@ -122,9 +134,17 @@ impl<'a> Ctx<'a> {
         None
     }
 
-    fn max_node(&mut self, st: &State, depth: u32, ply: usize, mut alpha: f32, beta: f32) -> f32 {
+    fn max_node(
+        &mut self,
+        st: &State,
+        depth: u32,
+        ply: usize,
+        mut alpha: f32,
+        beta: f32,
+        bonus: f32,
+    ) -> f32 {
         if depth == 0 {
-            return evaluate(st, self.w);
+            return evaluate(st, self.w) + bonus;
         }
         if self.check_time() {
             return 0.0;
@@ -144,7 +164,7 @@ impl<'a> Ctx<'a> {
         let mut best = -INF;
         let mut best_m = moves[0];
         for &m in &moves[..n] {
-            let v = self.min_node(st, m, depth, ply, alpha, beta);
+            let v = self.min_node(st, m, depth, ply, alpha, beta, bonus);
             if self.aborted {
                 return 0.0;
             }
@@ -211,6 +231,7 @@ impl<'a> Ctx<'a> {
         ply: usize,
         alpha: f32,
         beta: f32,
+        bonus: f32,
     ) -> f32 {
         let n = st.snakes.len();
         let rules = &*st.rules;
@@ -333,9 +354,15 @@ impl<'a> Ctx<'a> {
             }
             let mut child = st.clone();
             child.advance(&moves[..n]);
-            let val = match self.terminal(&child, ply + 1) {
+            let val = match self.terminal(st, &child, ply + 1) {
                 Some(t) => t,
-                None => self.max_node(&child, depth - 1, ply + 1, alpha, beta.min(v)),
+                None => {
+                    let mut b = bonus;
+                    if child.snakes[0].len() > st.snakes[0].len() {
+                        b += self.w.eat_early * EAT_DECAY.powi(ply as i32);
+                    }
+                    self.max_node(&child, depth - 1, ply + 1, alpha, beta.min(v), b)
+                }
             };
             if self.aborted {
                 return 0.0;
@@ -426,7 +453,7 @@ pub fn search(st: &State, cfg: &SearchConfig, deadline: Instant) -> SearchResult
                             rules: std::sync::Arc::new((*st.rules).clone()),
                             ..st.clone()
                         };
-                        let v = c.min_node(&local, m, depth, 0, -INF, INF);
+                        let v = c.min_node(&local, m, depth, 0, -INF, INF, 0.0);
                         if c.aborted {
                             return (i, None);
                         }
@@ -459,7 +486,7 @@ pub fn search(st: &State, cfg: &SearchConfig, deadline: Instant) -> SearchResult
             let mut alpha = -INF;
             for &i in &order {
                 let c = &mut ctxs[i];
-                let v = c.min_node(st, root[i], depth, 0, alpha, INF);
+                let v = c.min_node(st, root[i], depth, 0, alpha, INF, 0.0);
                 if c.aborted {
                     break;
                 }

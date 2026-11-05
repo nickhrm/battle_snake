@@ -46,6 +46,8 @@ pub struct Rules {
     pub hazards: Vec<u8>,
     /// hazard bitboard (only valid when `bitboard` is true); set by `finalize`
     pub hazard_bb: u128,
+    /// cells with even x + y (only valid when `bitboard` is true); set by `finalize`
+    pub even_bb: u128,
     /// board fits into a u128 and is not wrapped -> fast bitboard evaluation
     pub bitboard: bool,
     /// neighbour table: nbr[cell*4 + dir] (NONE if off-board)
@@ -91,6 +93,7 @@ impl Rules {
             hazard_damage,
             hazards: vec![0; cells],
             hazard_bb: 0,
+            even_bb: 0,
             bitboard: cells <= 128 && !wrapped,
             nbr,
         }
@@ -100,6 +103,14 @@ impl Rules {
     pub fn finalize(&mut self) {
         self.hazard_bb = 0;
         if self.bitboard {
+            self.even_bb = 0;
+            for y in 0..self.height {
+                for x in 0..self.width {
+                    if (x + y) % 2 == 0 {
+                        self.even_bb |= 1u128 << self.cell(x, y);
+                    }
+                }
+            }
             for (i, &h) in self.hazards.iter().enumerate() {
                 if h > 0 {
                     self.hazard_bb |= 1u128 << i;

@@ -27,6 +27,7 @@ pub fn profile(st: &State) -> Weights {
             length: 0.0,
             longest_bonus: 0.0,
             food_dist: 0.0,
+            eat_early: 0.0,
             ..w
         };
     }

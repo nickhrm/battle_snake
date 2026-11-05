@@ -36,6 +36,22 @@ pub struct Weights {
     pub health: f32,
     /// penalty for being adjacent to a wall/edge (head)
     pub edge: f32,
+    /// search: bonus for eating, decaying per ply. Without it the search sees no
+    /// difference between eating now and eating at the horizon and procrastinates.
+    pub eat_early: f32,
+    /// extra steps charged for food that an opponent reaches first
+    pub food_contest: f32,
+    /// how much of the checkerboard bound on fillable cells to apply to territory: a snake
+    /// alternates colours, so surplus cells of one colour can never all be visited
+    pub parity: f32,
+    /// value per food item inside our territory
+    pub food_owned: f32,
+    /// value per length unit against every opponent (capped at 5), on top of `length`
+    pub length_each: f32,
+    /// score of a head-to-head that kills us and the opponent, instead of a full loss.
+    /// 0 keeps the full loss. The opponent gives up its own game for it, so a
+    /// worst-case search that treats it as certain death flees every equal-length snake.
+    pub mutual: f32,
 }
 
 impl Default for Weights {
@@ -55,6 +71,12 @@ impl Default for Weights {
             hazard_cell: 0.25,
             health: 0.02,
             edge: 1.0,
+            eat_early: 8.0,
+            food_contest: 3.0,
+            parity: 0.0,
+            food_owned: 0.0,
+            length_each: 0.0,
+            mutual: 0.0,
         }
     }
 }
@@ -64,6 +86,8 @@ pub struct Voronoi {
     pub cells: [u16; 16],
     /// distance to the nearest food owned by each snake (NONE if none)
     pub food_dist: [u16; 16],
+    /// number of food items owned by each snake (bitboard path only)
+    pub food_cnt: [u8; 16],
 }
 
 struct Scratch {
@@ -90,8 +114,12 @@ thread_local! {
 /// segment has left (tail-aware). Ties go to the longer snake, equal-length ties
 /// are contested and block.
 pub fn voronoi(st: &State, hazard_value: f32) -> Voronoi {
+    voronoi_p(st, hazard_value, 0.0)
+}
+
+pub fn voronoi_p(st: &State, hazard_value: f32, parity: f32) -> Voronoi {
     if st.rules.bitboard {
-        return voronoi_bb(st, hazard_value);
+        return voronoi_bb(st, hazard_value, parity);
     }
     SCRATCH.with(|sc| voronoi_impl(st, hazard_value, &mut sc.borrow_mut()))
 }
@@ -138,6 +166,7 @@ fn voronoi_impl(st: &State, hazard_value: f32, sc: &mut Scratch) -> Voronoi {
         area: [0.0; 16],
         cells: [0; 16],
         food_dist: [NONE; 16],
+        food_cnt: [0; 16],
     };
     let mut lens = [0usize; 16];
     for (i, s) in st.snakes.iter().enumerate().take(n) {
@@ -215,16 +244,16 @@ fn voronoi_impl(st: &State, hazard_value: f32, sc: &mut Scratch) -> Voronoi {
 /// Bitboard version of [`voronoi`] for boards with <= 128 cells (11x11).
 /// Snakes expand from their whole owned region every step, so they can "wait"
 /// for body cells that free up later.
-pub fn voronoi_bb(st: &State, hazard_value: f32) -> Voronoi {
+pub fn voronoi_bb(st: &State, hazard_value: f32, parity: f32) -> Voronoi {
     match st.rules.width {
-        11 => voronoi_bb_w::<11>(st, hazard_value),
-        7 => voronoi_bb_w::<7>(st, hazard_value),
-        _ => voronoi_bb_w::<0>(st, hazard_value),
+        11 => voronoi_bb_w::<11>(st, hazard_value, parity),
+        7 => voronoi_bb_w::<7>(st, hazard_value, parity),
+        _ => voronoi_bb_w::<0>(st, hazard_value, parity),
     }
 }
 
 #[inline(always)]
-fn voronoi_bb_w<const W: u32>(st: &State, hazard_value: f32) -> Voronoi {
+fn voronoi_bb_w<const W: u32>(st: &State, hazard_value: f32, parity: f32) -> Voronoi {
     let rules = &*st.rules;
     let w = if W != 0 { W } else { rules.width as u32 };
     let n_cells = rules.cells() as u32;
@@ -252,6 +281,7 @@ fn voronoi_bb_w<const W: u32>(st: &State, hazard_value: f32) -> Voronoi {
         area: [0.0; 16],
         cells: [0; 16],
         food_dist: [NONE; 16],
+        food_cnt: [0; 16],
     };
     let mut food_bb: u128 = 0;
     for &f in &st.food {
@@ -351,18 +381,33 @@ fn voronoi_bb_w<const W: u32>(st: &State, hazard_value: f32) -> Voronoi {
         let o = owned[i];
         let c = o.count_ones();
         out.cells[i] = c as u16;
+        out.food_cnt[i] = (o & food_bb).count_ones() as u8;
         out.area[i] = if hz {
             let h = (o & rules.hazard_bb).count_ones();
             (c - h) as f32 + h as f32 * hazard_value
         } else {
             c as f32
         };
+        if parity != 0.0 {
+            // the path starts on the head's colour and alternates from there
+            let head = 1u128 << st.snakes[i].head();
+            let rest = o & !head;
+            let same_mask = if head & rules.even_bb != 0 {
+                rules.even_bb
+            } else {
+                !rules.even_bb
+            };
+            let same = (rest & same_mask).count_ones() as i32;
+            let other = rest.count_ones() as i32 - same;
+            let fill = 1 + if other > same { 2 * same + 1 } else { 2 * other };
+            out.area[i] -= parity * (c as i32 - fill).max(0) as f32;
+        }
     }
     out
 }
 
 pub fn evaluate(st: &State, w: &Weights) -> f32 {
-    let vor = voronoi(st, w.hazard_cell);
+    let vor = voronoi_p(st, w.hazard_cell, w.parity);
     let rules = &*st.rules;
     let me = st.me();
     let my_len = me.len() as i32;
@@ -371,11 +416,13 @@ pub fn evaluate(st: &State, w: &Weights) -> f32 {
     let mut sum_opp_area: f32 = 0.0;
     let mut max_opp_len: i32 = 0;
     let mut opps = 0;
+    let mut each = 0.0;
     for (i, s) in st.snakes.iter().enumerate().skip(1) {
         if !s.alive {
             continue;
         }
         opps += 1;
+        each += ((my_len - s.len() as i32) as f32).clamp(-5.0, 5.0);
         let a = vor.area[i.min(15)];
         max_opp_area = max_opp_area.max(a);
         sum_opp_area += a;
@@ -398,18 +445,28 @@ pub fn evaluate(st: &State, w: &Weights) -> f32 {
             if my_len > max_opp_len {
                 score += w.longest_bonus;
             }
+            score += w.length_each * each;
         }
+        score += w.food_owned * vor.food_cnt[0] as f32;
 
-        // food
+        // food: owned food at its true distance, contested food at a surcharge. Going by owned
+        // food alone leaves a short snake without any gradient, since longer snakes win ties.
         let fd = vor.food_dist[0];
+        let head = me.head();
+        let nearest = if w.food_contest < 0.0 {
+            None
+        } else {
+            st.food.iter().map(|&f| rules.dist(head, f)).min()
+        };
+        let d = match (fd != NONE, nearest) {
+            (true, Some(n)) => (fd as f32).min(n as f32 + w.food_contest),
+            (true, None) => fd as f32,
+            (false, Some(n)) => n as f32 + w.food_contest,
+            (false, None) => (rules.width + rules.height) as f32,
+        };
         let want =
             me.health < w.hunger_health || (opps > 0 && my_len < max_opp_len + w.want_length_lead);
         if want {
-            let d = if fd == NONE {
-                (rules.width + rules.height) as f32
-            } else {
-                fd as f32
-            };
             let urgency = if me.health < w.hunger_health {
                 1.0 + (w.hunger_health - me.health) as f32 / 20.0
             } else {
@@ -418,9 +475,15 @@ pub fn evaluate(st: &State, w: &Weights) -> f32 {
             score -= w.food_dist * urgency * d;
         }
         // impending starvation: no food we can reach in time
-        let need = if fd == NONE { i32::MAX } else { fd as i32 };
-        if me.health < need.min(1000) || (fd == NONE && me.health < 15) {
-            score -= 200.0;
+        match nearest {
+            Some(n) if me.health >= n => {}
+            None if w.food_contest < 0.0 => {
+                let need = if fd == NONE { i32::MAX } else { fd as i32 };
+                if me.health < need.min(1000) || (fd == NONE && me.health < 15) {
+                    score -= 200.0;
+                }
+            }
+            _ => score -= 200.0,
         }
         score -= w.health * (100 - me.health) as f32;
     }
@@ -461,7 +524,7 @@ mod tests {
             food: vec![r.cell(5, 5)],
             turn: 0,
         };
-        let a = voronoi_bb(&st, 1.0);
+        let a = voronoi_bb(&st, 1.0, 0.0);
         let mut rs = (*r).clone();
         rs.bitboard = false;
         let st2 = State {
@@ -479,5 +542,44 @@ mod tests {
             b.cells[0]
         );
         assert_eq!(a.food_dist[0], NONE); // center food is contested
+    }
+
+    #[test]
+    fn parity_limits_fillable_area() {
+        // a snake owning a strip: head at the left end of a corridor with side pockets
+        let mut r = Rules::new(11, 11, false, false, 0);
+        r.finalize();
+        let r = Arc::new(r);
+        // wall everything off except a plus shape around (5,5): centre plus 4 neighbours
+        let walls: Vec<u16> = (0..121u16)
+            .filter(|&c| {
+                let (x, y) = r.xy(c);
+                let d = (x - 5).abs() + (y - 5).abs();
+                d > 1 && !(x == 0 && y == 0)
+            })
+            .collect();
+        let me = Snake {
+            body: [r.cell(4, 5)].into_iter().collect(),
+            health: 90,
+            alive: true,
+        };
+        let wall = Snake {
+            body: walls.into_iter().collect(),
+            health: 90,
+            alive: true,
+        };
+        let mut rs = (*r).clone();
+        rs.constrictor = true;
+        let st = State {
+            rules: Arc::new(rs),
+            snakes: vec![me, wall],
+            food: vec![],
+            turn: 0,
+        };
+        let plain = voronoi_bb(&st, 1.0, 0.0);
+        let bound = voronoi_bb(&st, 1.0, 1.0);
+        assert_eq!(plain.area[0], 5.0);
+        // from the arm: centre, then one more arm; the other two arms stay unreachable
+        assert_eq!(bound.area[0], 3.0);
     }
 }

@@ -63,7 +63,7 @@ fn engine_json(st: &State, you: usize, mode: Mode, game_id: &str, timeout: u64) 
         "game": {
             "id": game_id,
             "ruleset": {"name": name, "version": "v1.2.3", "settings": {
-                "foodSpawnChance": if mode == Mode::Royale { 20 } else { 15 },
+                "foodSpawnChance": 15,
                 "minimumFood": 1, "hazardDamagePerTurn": if mode == Mode::Royale { 14 } else { 0 },
                 "hazardMap": "", "hazardMapAuthor": "",
                 "royale": {"shrinkEveryNTurns": 25},
@@ -222,8 +222,17 @@ struct Args {
     dump: Option<String>,
 }
 
-fn parse_weights(s: &str) -> Weights {
-    serde_json::from_str(s).unwrap_or_else(|e| panic!("bad weights json {s}: {e}"))
+/// `s` overrides the production weights of the mode, so a test sees what the server plays.
+fn parse_weights(s: &str, mode: Mode) -> Weights {
+    let players = if mode == Mode::Duel { 2 } else { 4 };
+    let base = honey_badger::profile(&World::new(mode, players, 1).st);
+    let mut v = serde_json::to_value(base).unwrap();
+    let over: serde_json::Value =
+        serde_json::from_str(s).unwrap_or_else(|e| panic!("bad weights json {s}: {e}"));
+    for (k, x) in over.as_object().expect("weights must be a JSON object") {
+        v[k] = x.clone();
+    }
+    serde_json::from_value(v).unwrap()
 }
 
 fn parse_args() -> Args {
@@ -247,6 +256,8 @@ fn parse_args() -> Args {
     let mut verbose = false;
     let mut timeout = 500;
     let mut dump: Option<String> = None;
+    let mut a_json = "{}".to_string();
+    let mut b_json = "{}".to_string();
     while let Some(k) = it.next() {
         let mut v = || it.next().expect("missing value");
         match k.as_str() {
@@ -269,8 +280,8 @@ fn parse_args() -> Args {
             }
             "--ams" => a.ms = v().parse().unwrap(),
             "--bms" => b.ms = v().parse().unwrap(),
-            "--a" => a.cfg.weights = parse_weights(&v()),
-            "--b" => b.cfg.weights = parse_weights(&v()),
+            "--a" => a_json = v(),
+            "--b" => b_json = v(),
             "--bgreedy" => b.greedy = true,
             "--bhttp" => b.http = Some(v()),
             "--timeout" => timeout = v().parse().unwrap(),
@@ -286,6 +297,8 @@ fn parse_args() -> Args {
             _ => panic!("unknown arg {k}"),
         }
     }
+    a.cfg.weights = parse_weights(&a_json, mode);
+    b.cfg.weights = parse_weights(&b_json, mode);
     Args {
         mode,
         games,
@@ -384,7 +397,7 @@ impl World {
             return;
         }
         let min_food = 1;
-        let chance = if self.mode == Mode::Royale { 20 } else { 15 };
+        let chance = 15;
         let need = if (self.st.food.len() as i32) < min_food {
             min_food - self.st.food.len() as i32
         } else if self.rng.gen_range(0..100) < chance {
