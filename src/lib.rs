@@ -28,6 +28,9 @@ pub fn profile(st: &State) -> Weights {
             longest_bonus: 0.0,
             food_dist: 0.0,
             eat_early: 0.0,
+            // the game is decided by territory alone within about 35 turns
+            opp_area: 1.0,
+            opp_area_sum: 0.3,
             ..w
         };
     }
