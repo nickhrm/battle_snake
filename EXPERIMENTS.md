@@ -20,6 +20,7 @@ Vorhersage. Commits im Abstand von wenigen Stunden lassen sich in der Arena nich
 | 11-05 11:37 | `36f0069` deployt | 53.0 (274) | 35.4 (269) | 17.4 (3) | 17.0 (3) | `parity` 0.5 |
 | 11-05 13:10 | Messung, kein Deploy | 54.3 (#16, 281) | 35.9 (#15, 274) | in Platzierung (9) | in Platzierung (9) | seit dem Leeres-Brett-Fix: Standard 8/9 Siege, Duel 6/8 |
 | 11-05 15:10 | Basis vor Royale-Profil | 54.2 (#17, 290) | 37.2 (#12, 283) | 28.0 (#17, 17) | 18.7 (#21, 18) | zum Vergleich nach dem Deploy; Metriken: Hungertode, Platzierung im Royale |
+| 11-06 09:25 | Basis vor Duell-Fix | 57.4 (#10, 368) | 40.1 (#10, 360) | 33.1 (#14, 98) | 20.9 (#18, 98) | zum Vergleich nach dem Deploy; Metriken: Duell-Siegquote, `gg`-Serien ohne Sieg (bisher 54 von 90 Duellen) |
 
 Die globale Rangliste summiert die beste Wertung pro Leaderboard (fehlendes Board = 0).
 
@@ -56,6 +57,22 @@ Arena-Profil: <https://arena.battlesnake.com/battlesnakes/837dbb1c-2781-4e13-8b3
 
 ## Beobachtungen aus Arena-Spielen
 
+- **2026-11-06 (893 Spiele, davon 347 seit dem Beitritt zu Royale/Constrictor): Serverlast und Timeouts.**
+  - Der Matchmaker startet alle 14,4 Minuten 4–5 Spiele innerhalb von etwa 7 s. Etwa 80 % der Zeit
+    läuft bei uns gar kein Spiel, die Last kommt in kurzen Schüben.
+  - Timeouts hängen nicht an der Parallelität: 11,3 / 5,8 / 8,5 / 6,1 / 0 pro 10k Züge bei 1 / 2 / 3 / 4 / 5
+    Spielen (p99-Latenz 387–390 ms). Vor dem Beitritt 8,6, danach 7,6. Bei einem Timeout bleiben die anderen
+    eigenen Spiele normal (Median 381 ms), nur 1 Paar Timeouts in verschiedenen Spielen liegt unter 5 s
+    auseinander. Die Aussetzer treffen also einzelne Anfragen, nicht den ganzen Server.
+  - Anteil der Rechenzüge: Duell 42,8 %, Standard 34,4 %, Royale 20,9 %, Constrictor 1,9 %.
+  - Rechenzeit in Self-Play (je 200 Spiele, ±50 Elo): halbe Zeit (40 gegen 20 ms) Standard −24, Duell −65;
+    viertel Zeit (40 gegen 10 ms) Standard −74, Duell −129.
+  - Latenz-Rand: 121 Züge ≥ 400 ms, davon 58 ≥ 500 ms. Wir antworten mit p50 381 ms am spätesten im Feld
+    (NMC² 319 ms bei 0 Timeouts in 3949 Zügen, corrosion 350 ms, Kaisel 250 ms).
+  - 9 von 347 Spielen endeten innerhalb von 2 Zügen nach einem Timeout. Darunter Duell `b212cf8f`, zwei
+    Timeouts in Zug 1–2 um 20:26 UTC, vermutlich Neustart beim Deploy (Zeitpunkt nicht belegt).
+  - Offen: Die Suche rechnet immer bis zur Deadline, verlorene Tiefe ist deshalb in der Latenz unsichtbar.
+    Dafür braucht es die `MOVE`-Logs (`depth`, `nodes`) und die Kernzahl des Servers.
 - **2026-11-05 (512 Spiele, Vergleich mit allen Gegnern):**
   - Erstes Futter im Median bei Zug 10 (4er) bzw. 16 (Duell), bei fast allen Gegnern bei Zug 2.
     Duell-Länge bei Zug 50: 5,8 gegen 7–9. Self-Play konnte das nie zeigen, beide Seiten
@@ -84,6 +101,45 @@ Arena-Profil: <https://arena.battlesnake.com/battlesnakes/837dbb1c-2781-4e13-8b3
 
 Elo-Werte sind aus Self-Play, Variante (A) gegen die Basis (B). ✅ übernommen, ❌ verworfen,
 ➖ neutral bzw. nicht übernommen.
+
+### Runde 5 (2026-11-06): Falsche Siegbeweise und Stagnation
+
+Die Arena-Wertung ist flach geworden (Delta pro 100 Spiele seit 11-05 14:00, 95 %-CI): Standard +2,9
+(−0,4 bis +6,3), Duel +4,3 (+1,0 bis +7,6), Royale +12 (−2 bis +27), Constrictor +5 (−10 bis +20).
+Duel seit dem Leeres-Brett-Fix: 0–9 gegen die Top 5 (ein Spiel fiel durch 2 Timeouts in Zug 1–2),
+60–21 gegen den Rest.
+
+**Fehler in `src/search.rs` (`min_node`):** Gegner außerhalb von `reach = 2*depth+1` bekommen nur
+`default_move`. Stirbt so ein Gegner in der Suche, gilt das als Sieg, die Vertiefung stoppt, und der Server
+antwortet in 20 ms mit `gg`. Beispiel `d3087934` Zug 434: Tiefe 5, 95 Knoten, `999950`, bei 44 gegen 19
+Länge, 16 Züge später tot. Seit dem Fix hatten 54 von 90 Duellen, 30 von 92 Standard-, 26 von 94 Royale- und
+26 von 94 Constrictor-Spielen `gg`-Serien, die nicht zum sofortigen Sieg führten. Nicht jede davon muss von
+`reach` kommen (neues Futter kann einen echten Beweis kippen). 10 von 30 Duell-Niederlagen hatten `gg`.
+
+Self-Play bei 40 ms gegen die Basis. Übernommen ist nur `duel_full`, und zwar ohne Schalter: Es gilt, sobald bei Suchbeginn
+nur noch ein Gegner lebt, also auch im Endspiel von 4er-Partien. Dieser Fall ist im Self-Play nicht einzeln gemessen.
+`soft_win` bleibt draußen, weil es in 4er-Partien nichts Messbares bringt.
+
+| Variante | Modus | Spiele | Elo |
+|---|---|---|---|
+| im Duell alle Gegnerzüge rechnen (`duel_full`) | Duel | 400 | **+78** |
+| Sieg nur bei vollständig aufgezählten Gegnerzügen (`soft_win`) | Standard | 300 | +20 |
+| `soft_win` | Royale | 300 | −10 |
+| `soft_win` | Constrictor | 600 | +5 |
+
+Weitere Befunde seit dem Fix:
+- Duel: 10 von 30 Niederlagen mit mindestens +3 Länge bei der letzten Entscheidung, 8 mit mindestens +10.
+  Gegen die Top 5 lag der Score oft schon 90–190 Züge vor dem Tod dauerhaft unter −30.
+- Bis Zug 200 sagt der Such-Score das Ergebnis nicht besser voraus als die Längendifferenz (AUC 0,66–0,71).
+- Standard: Bei Niederlagen −4,3 Länge bei Zug 100, bei Siegen −0,4. 43 von 56 Toden lagen mindestens 3 zurück.
+- Royale: 42 von 50 Toden durch Hazard oder Hunger, im Median mit 55 sicheren Feldern. Etwa 10 Tode genau
+  7 Züge nach einem Futter im Hazard, 6-mal hatte der letzte Gegner dabei höchstens 5 HP. Hazard-Anteil der Züge
+  12,3 % gegen 7,7 % bei den Gegnern. Das Royale-Profil verschob Hunger- zu Hazard-Toden, ein Rückschritt ist
+  bei gleicher Gegnerstärke nicht nachweisbar.
+
+Nächste Schritte: `duel_full` übernehmen und einzeln in der Arena bewerten, dann Royale-Bewertungsterm für die
+Rückkehr aus dem Hazard (Gesundheit gegen Distanz zum sicheren Feld), danach Futter in Standard. Gewichts-Tuning
+ist ausgereizt (Runde 4), gegen die Top 5 braucht es vermutlich eine bessere Bewertung, keine neuen Gewichte.
 
 ### Runde 4 (2026-11-05): Hypothesen aus den Spielen der Top-Snakes
 

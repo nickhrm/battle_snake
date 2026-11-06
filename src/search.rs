@@ -262,7 +262,9 @@ impl<'a> Ctx<'a> {
         let reach = (2 * depth as i32 + 1).min(self.max_reach);
         for (rank, &(d, j)) in cand[..nc].iter().enumerate() {
             idxs[no] = j;
-            if d <= reach && rank < self.max_relevant {
+            // A proven win must not rest on a guessed move, so the last opponent is always
+            // searched in full. It costs little: there is only one snake to enumerate.
+            if (d <= reach || self.start_opps == 1) && rank < self.max_relevant {
                 let c = st.safe_moves(j, &mut opt[no]);
                 if c == 0 {
                     opt[no][0] = st.fallback_move(j);
@@ -643,6 +645,19 @@ mod tests {
         let r = best(&st, 100);
         assert!(is_win(r.score), "{:?}", r);
         assert_eq!(r.best, Dir::Left);
+    }
+
+    #[test]
+    fn distant_last_opponent_is_not_a_proven_win() {
+        // arena game d3087934, turn 434: the opponent is ten cells away in a pocket and survives
+        // by following its own tail, but its heuristic default move runs into the dead end
+        let js = std::fs::read_to_string("tests/fixtures/false_win_duel.json").unwrap();
+        let st = serde_json::from_str::<crate::api::GameState>(&js)
+            .unwrap()
+            .to_state();
+        let r = best(&st, 100);
+        assert!(!is_win(r.score), "{:?}", r);
+        assert!(r.depth > 5, "{:?}", r);
     }
 
     #[test]

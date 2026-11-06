@@ -10,7 +10,8 @@ A competitive [Battlesnake](https://play.battlesnake.com) written in Rust.
 * **Search** (`src/search.rs`): iterative-deepening **paranoid alpha-beta** over simultaneous moves.
   We pick a move, then every nearby opponent replies *knowing* our move. A move only looks good if
   no combination of opponent moves can punish it. Snakes too far away to interact in the remaining
-  depth get one cheap heuristic move each, which keeps 4-player games deep enough. Each root move is
+  depth get one cheap heuristic move each, which keeps 4-player games deep enough. The last remaining
+  opponent is always searched in full, so a proven win never rests on a guessed move. Each root move is
   searched on its own thread. Killer moves order both max and min nodes.
 * **Evaluation** (`src/eval.rs`): a **tail-aware Voronoi** territory count. Cells become available
   once the body segment on them has moved away. It runs as a `u128` bitboard on 11x11 (~0.5 µs).
