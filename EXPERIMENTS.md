@@ -102,6 +102,52 @@ Arena-Profil: <https://arena.battlesnake.com/battlesnakes/837dbb1c-2781-4e13-8b3
 Elo-Werte sind aus Self-Play, Variante (A) gegen die Basis (B). ✅ übernommen, ❌ verworfen,
 ➖ neutral bzw. nicht übernommen.
 
+### Runde 6 (2026-11-06, läuft): Tempo und Testumgebung
+
+**Offen beim Wechsel auf den Laptop:**
+1. Prüfen, ob `0357c78` (Duell-Fix, Push 11-06 09:28 UTC) deployt ist, und die Deploy-Zeit in der Tabelle „Stand“ eintragen.
+2. Nach etwa 100 Duellen seit dem Deploy bewerten: Siegquote (vorher 67 %), `gg`-Serien ohne Sieg (54 von 90), Bilanz
+   gegen die Top 5 (0–9). Bis dahin nichts anderes deployen.
+3. `MOVE`-Logs vom Server holen: Tiefe bei einem Spiel gegen vier gleichzeitige Spiele. Der Server hat 8 Threads.
+4. `territory` im Duel mit mindestens 600 Spielen nachtesten (`{"opp_area":1.2,"length":10}`).
+5. Stellungstest vollständig laufen lassen, er wurde abgebrochen.
+6. Danach Punkt 3, 4, 5 unten.
+
+Tempo (Bench, 300 ms, 43 Arena-Stellungen, lokal):
+
+| Suche | Duel Tiefe | Duel Knoten | Standard Tiefe | Standard Knoten |
+|---|---|---|---|---|
+| sequenziell | 11,1 | 154k | 6,83 | 108k |
+| parallel (`main`) | 11,3 | 349k | 6,87 | 223k |
+| PV-Splitting (Branch `pv-split`) | 11,3 | 206k | 6,91 | 224k |
+
+Sequenziell je Verdopplung der Rechenzeit: Duel etwa +0,7 Züge, Standard etwa +0,3 Züge (75 bis 1200 ms). Tempo ist in
+Standard kein Hebel. `pv-split` ist korrekt (gleiche Werte wie sequenziell bis Tiefe 7), bringt aber keine Tiefe, im
+schmalen Duell-Baum arbeiten höchstens zwei Threads. ➖ geparkt, ungemessen in Elo. Mehr Threads helfen also nicht, nur schnellere Kerne.
+
+Gegnerpool (`tools/gauntlet.sh`, 10 ms, Commit `0357c78`, Score der Basis):
+
+| Stil | Duel (je 200) | Standard (je 150) |
+|---|---|---|
+| self | 0,497 | 0,520 |
+| hungry | 0,583 | 0,553 |
+| territory | **0,400** | 0,510 |
+| cautious | 0,500 | 0,443 |
+| long | 0,578 | 0,593 |
+| Mittel | 0,512 | 0,524 |
+
+Stellungstest (`tools/fetch_top.py`, `agree 100 8 all`, `tools/top_report.py`), Top-5-Züge in gewonnenen Partien. Nur Duel,
+Standard fehlt, Lauf abgebrochen: Übereinstimmung 63,6 %, Fehlgriffe 2,3 % (n = 2078). Zug < 25: 76,0 %, ab Zug 250: 60,6 %.
+
+Nächste Ideen für Duel:
+- **Punkt 3:** Kipppunkte der Top-5-Niederlagen suchen (Score bleibt ab dort unter −30) und vergleichen: Fluchtwege, Engstellen, sicheres Gebiet.
+- **Punkt 4:** Bei nahen Köpfen an der Wurzel eine 3×3-Tabelle rechnen und als Spiel mit gleichzeitigen Zügen lösen.
+  Zuerst messen, wie oft das den Zug ändert. Abbrechen, falls selten.
+- **Punkt 5:** Erst nach dem Arena-Urteil. Kammerbaum wie bei Tron-KIs: Gebiet an Artikulationspunkten zerlegen, nur den
+  besten Pfad werten. Teuer, also nur bei vollem Brett rechnen.
+
+Ein neuer Term braucht: Sieg im Self-Play, besseres Mittel im Gegnerpool, Stellungstest nicht schlechter.
+
 ### Runde 5 (2026-11-06): Falsche Siegbeweise und Stagnation
 
 Die Arena-Wertung ist flach geworden (Delta pro 100 Spiele seit 11-05 14:00, 95 %-CI): Standard +2,9
