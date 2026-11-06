@@ -61,6 +61,7 @@ pub fn config_for(st: &State, parallel: bool) -> SearchConfig {
     SearchConfig {
         weights: weights_for(st),
         parallel,
+        pv_split: std::env::var("PV_SPLIT").map(|v| v != "0").unwrap_or(true),
         ..SearchConfig::default()
     }
 }

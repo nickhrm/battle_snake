@@ -286,6 +286,10 @@ fn parse_args() -> Args {
             "--bhttp" => b.http = Some(v()),
             "--timeout" => timeout = v().parse().unwrap(),
             "--apar" => a.cfg.parallel = true,
+            "--bpar-old" => {
+                b.cfg.parallel = true;
+                b.cfg.pv_split = false;
+            }
             "--dump" => dump = Some(v()),
             "--arel" => a.cfg.max_relevant = v().parse().unwrap(),
             "--brel" => b.cfg.max_relevant = v().parse().unwrap(),

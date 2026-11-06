@@ -6,8 +6,9 @@
 //! combination of opponent moves kills us.
 
 use crate::eval::{evaluate, Weights};
-use crate::game::{Dir, State};
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use crate::game::{Dir, Rules, State};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 pub const WIN: f32 = 1_000_000.0;
@@ -27,6 +28,10 @@ pub struct SearchConfig {
     pub max_reach: i32,
     /// sequential only: search every root move with a full window, for analysis
     pub exact_root: bool,
+    /// parallel only: search the principal variation first and split its siblings
+    pub pv_split: bool,
+    /// parallel only: number of search threads
+    pub threads: usize,
 }
 
 impl Default for SearchConfig {
@@ -38,6 +43,11 @@ impl Default for SearchConfig {
             max_relevant: 3,
             max_reach: 99,
             exact_root: false,
+            pv_split: true,
+            threads: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1)
+                .min(MAX_THREADS),
         }
     }
 }
@@ -73,6 +83,69 @@ struct Ctx<'a> {
     shared_alpha: Option<&'a AtomicU32>,
     /// highest shared alpha this context has used during the current root search
     alpha_seen: f32,
+    /// private copy of the rules: every State clone bumps the Arc refcount, which would
+    /// otherwise bounce between cores
+    rules: Arc<Rules>,
+}
+
+/// Search threads per move. Several games run at once on the server, so this stays small.
+const MAX_THREADS: usize = 4;
+
+/// Nodes with less remaining depth stay on one thread: spawning would cost more than it saves.
+const SPLIT_DEPTH: u32 = 4;
+
+/// Lower the f32 stored in `a` to at most `v`.
+fn store_min(a: &AtomicU32, v: f32) {
+    let mut cur = a.load(Ordering::Relaxed);
+    while v < f32::from_bits(cur) {
+        match a.compare_exchange_weak(cur, v.to_bits(), Ordering::Relaxed, Ordering::Relaxed) {
+            Ok(_) => break,
+            Err(x) => cur = x,
+        }
+    }
+}
+
+/// Raise the f32 stored in `a` to at least `v`.
+fn store_max(a: &AtomicU32, v: f32) {
+    let mut cur = a.load(Ordering::Relaxed);
+    while v > f32::from_bits(cur) {
+        match a.compare_exchange_weak(cur, v.to_bits(), Ordering::Relaxed, Ordering::Relaxed) {
+            Ok(_) => break,
+            Err(x) => cur = x,
+        }
+    }
+}
+
+/// The opponents' joint replies to one of our moves.
+struct Replies {
+    opt: [[Dir; 4]; 16],
+    cnt: [usize; 16],
+    idxs: [usize; 16],
+    no: usize,
+    total: usize,
+    /// joint move to try first (killer)
+    first: Option<usize>,
+}
+
+impl Replies {
+    /// Write the `step`-th joint reply into `moves` and return its killer code.
+    #[inline]
+    fn joint(&self, step: usize, moves: &mut [Dir; 16]) -> u32 {
+        let ji = match self.first {
+            Some(f) if step == 0 => f,
+            Some(f) if step <= f => step - 1,
+            _ => step,
+        };
+        let mut rem = ji;
+        let mut code = 0u32;
+        for k in 0..self.no {
+            let m = self.opt[k][rem % self.cnt[k]];
+            rem /= self.cnt[k];
+            moves[self.idxs[k]] = m;
+            code |= (m as u32) << (2 * k);
+        }
+        code
+    }
 }
 
 /// Decay per ply of the eating bonus.
@@ -86,6 +159,7 @@ impl<'a> Ctx<'a> {
         start_opps: usize,
         max_relevant: usize,
         max_reach: i32,
+        rules: Arc<Rules>,
     ) -> Self {
         Ctx {
             w,
@@ -100,6 +174,7 @@ impl<'a> Ctx<'a> {
             killer_opp: [u32::MAX; MAX_PLY],
             shared_alpha: None,
             alpha_seen: -INF,
+            rules,
         }
     }
 
@@ -226,17 +301,8 @@ impl<'a> Ctx<'a> {
         best
     }
 
-    fn min_node(
-        &mut self,
-        st: &State,
-        my_move: Dir,
-        depth: u32,
-        ply: usize,
-        alpha: f32,
-        beta: f32,
-        bonus: f32,
-    ) -> f32 {
-        let n = st.snakes.len();
+    #[inline(always)]
+    fn replies(&self, st: &State, my_move: Dir, depth: u32, ply: usize) -> Replies {
         let rules = &*st.rules;
         let my_head = st.snakes[0].head();
         let my_next = rules.step(my_head, my_move);
@@ -250,7 +316,7 @@ impl<'a> Ctx<'a> {
         // pick relevant opponents (closest first)
         let mut cand: [(i32, usize); 16] = [(i32::MAX, 0); 16];
         let mut nc = 0;
-        for j in 1..n.min(16) {
+        for j in 1..st.snakes.len().min(16) {
             let s = &st.snakes[j];
             if !s.alive {
                 continue;
@@ -293,13 +359,7 @@ impl<'a> Ctx<'a> {
         let p = ply.min(MAX_PLY - 1);
         let killer = self.killer_opp[p];
 
-        let mut moves = [Dir::Up; 16];
-        moves[0] = my_move;
-        let mut v = INF;
-        let mut best_code = u32::MAX;
-
-        // iterate joint moves, killer first
-        let mut order_first: Option<usize> = None;
+        let mut first: Option<usize> = None;
         if killer != u32::MAX && total > 1 {
             // decode killer into an index if all moves are available
             let mut idx = 0usize;
@@ -317,12 +377,66 @@ impl<'a> Ctx<'a> {
                 mul *= cnt[k];
             }
             if ok {
-                order_first = Some(idx);
+                first = Some(idx);
             }
         }
+        Replies {
+            opt,
+            cnt,
+            idxs,
+            no,
+            total,
+            first,
+        }
+    }
+
+    /// Value of the position after a joint move, searched with the window (alpha, beta).
+    #[inline(always)]
+    #[allow(clippy::too_many_arguments)]
+    fn child_value(
+        &mut self,
+        st: &State,
+        moves: &[Dir],
+        depth: u32,
+        ply: usize,
+        alpha: f32,
+        beta: f32,
+        bonus: f32,
+    ) -> f32 {
+        let mut child = st.clone();
+        child.advance(moves);
+        match self.terminal(st, &child, ply + 1) {
+            Some(t) => t,
+            None => {
+                let mut b = bonus;
+                if child.snakes[0].len() > st.snakes[0].len() {
+                    b += self.w.eat_early * EAT_DECAY.powi(ply as i32);
+                }
+                self.max_node(&child, depth - 1, ply + 1, alpha, beta, b)
+            }
+        }
+    }
+
+    fn min_node(
+        &mut self,
+        st: &State,
+        my_move: Dir,
+        depth: u32,
+        ply: usize,
+        alpha: f32,
+        beta: f32,
+        bonus: f32,
+    ) -> f32 {
+        let n = st.snakes.len();
+        let r = self.replies(st, my_move, depth, ply);
+        let p = ply.min(MAX_PLY - 1);
+        let mut moves = [Dir::Up; 16];
+        moves[0] = my_move;
+        let mut v = INF;
+        let mut best_code = u32::MAX;
 
         let mut alpha = alpha;
-        for step in 0..total {
+        for step in 0..r.total {
             if ply == 0 {
                 if let Some(sa) = self.shared_alpha {
                     let a = f32::from_bits(sa.load(Ordering::Relaxed));
@@ -337,38 +451,8 @@ impl<'a> Ctx<'a> {
                     }
                 }
             }
-            let ji = match order_first {
-                Some(f) => {
-                    if step == 0 {
-                        f
-                    } else if step <= f {
-                        step - 1
-                    } else {
-                        step
-                    }
-                }
-                None => step,
-            };
-            let mut rem = ji;
-            let mut code = 0u32;
-            for k in 0..no {
-                let m = opt[k][rem % cnt[k]];
-                rem /= cnt[k];
-                moves[idxs[k]] = m;
-                code |= (m as u32) << (2 * k);
-            }
-            let mut child = st.clone();
-            child.advance(&moves[..n]);
-            let val = match self.terminal(st, &child, ply + 1) {
-                Some(t) => t,
-                None => {
-                    let mut b = bonus;
-                    if child.snakes[0].len() > st.snakes[0].len() {
-                        b += self.w.eat_early * EAT_DECAY.powi(ply as i32);
-                    }
-                    self.max_node(&child, depth - 1, ply + 1, alpha, beta.min(v), b)
-                }
-            };
+            let code = r.joint(step, &mut moves);
+            let val = self.child_value(st, &moves[..n], depth, ply, alpha, beta.min(v), bonus);
             if self.aborted {
                 return 0.0;
             }
@@ -383,6 +467,220 @@ impl<'a> Ctx<'a> {
         if best_code != u32::MAX {
             self.killer_opp[p] = best_code;
         }
+        v
+    }
+
+    /// Hand this context's killers to the helpers before they join a split.
+    fn share_killers(&self, helpers: &mut [Ctx<'a>]) {
+        for h in helpers.iter_mut() {
+            h.killer_me = self.killer_me;
+            h.killer_opp = self.killer_opp;
+        }
+    }
+
+    /// Principal variation of a max node: the first move is followed down this same path, the
+    /// remaining moves run in parallel against its value. There is no beta here: the first
+    /// child of every node on the path has no sibling to cut it off.
+    fn pv_max(
+        &mut self,
+        helpers: &mut [Ctx<'a>],
+        st: &State,
+        depth: u32,
+        ply: usize,
+        bonus: f32,
+    ) -> f32 {
+        if depth == 0 {
+            return evaluate(st, self.w) + bonus;
+        }
+        if self.check_time() {
+            return 0.0;
+        }
+        let mut moves = [Dir::Up; 4];
+        let n = st.safe_moves(0, &mut moves);
+        if n == 0 {
+            return LOSS + (ply as f32 + 1.0) * 10.0;
+        }
+        let p = ply.min(MAX_PLY - 1);
+        let k = self.killer_me[p];
+        if k != 255 {
+            if let Some(pos) = moves[..n].iter().position(|&d| d as u8 == k) {
+                moves[..n].swap(0, pos);
+            }
+        }
+        let first = self.pv_min(helpers, st, moves[0], depth, ply, bonus);
+        if self.aborted {
+            return 0.0;
+        }
+        let mut best = first;
+        let mut best_m = moves[0];
+        if depth >= SPLIT_DEPTH && n > 2 && !helpers.is_empty() {
+            self.share_killers(helpers);
+            let alpha = AtomicU32::new(best.to_bits());
+            let next = AtomicUsize::new(1);
+            let moves = &moves;
+            let work = |c: &mut Ctx<'a>| {
+                let local = State {
+                    rules: c.rules.clone(),
+                    ..st.clone()
+                };
+                let mut found: Option<(f32, Dir)> = None;
+                loop {
+                    let k = next.fetch_add(1, Ordering::Relaxed);
+                    if k >= n {
+                        return found;
+                    }
+                    let a = f32::from_bits(alpha.load(Ordering::Relaxed));
+                    let v = c.min_node(&local, moves[k], depth, ply, a, INF, bonus);
+                    if c.aborted {
+                        return found;
+                    }
+                    store_max(&alpha, v);
+                    if v > a && found.is_none_or(|(x, _)| v > x) {
+                        found = Some((v, moves[k]));
+                    }
+                }
+            };
+            let mut all: Vec<(f32, Dir)> = Vec::new();
+            std::thread::scope(|sc| {
+                let handles: Vec<_> = helpers
+                    .iter_mut()
+                    .take(n - 2)
+                    .map(|h| {
+                        let work = &work;
+                        sc.spawn(move || work(h))
+                    })
+                    .collect();
+                all.extend(work(self));
+                all.extend(handles.into_iter().filter_map(|h| h.join().unwrap()));
+            });
+            if helpers.iter().any(|h| h.aborted) {
+                self.aborted = true;
+            }
+            if self.aborted {
+                return 0.0;
+            }
+            for (v, m) in all {
+                if v > best {
+                    best = v;
+                    best_m = m;
+                }
+            }
+        } else {
+            for &m in &moves[1..n] {
+                let v = self.min_node(st, m, depth, ply, best, INF, bonus);
+                if self.aborted {
+                    return 0.0;
+                }
+                if v > best {
+                    best = v;
+                    best_m = m;
+                }
+            }
+        }
+        self.killer_me[p] = best_m as u8;
+        best
+    }
+
+    /// Principal variation of a min node: see `pv_max`.
+    fn pv_min(
+        &mut self,
+        helpers: &mut [Ctx<'a>],
+        st: &State,
+        my_move: Dir,
+        depth: u32,
+        ply: usize,
+        bonus: f32,
+    ) -> f32 {
+        let n = st.snakes.len();
+        let r = self.replies(st, my_move, depth, ply);
+        let p = ply.min(MAX_PLY - 1);
+        let mut moves = [Dir::Up; 16];
+        moves[0] = my_move;
+        let code = r.joint(0, &mut moves);
+        let mut child = st.clone();
+        child.advance(&moves[..n]);
+        let first = match self.terminal(st, &child, ply + 1) {
+            Some(t) => t,
+            None => {
+                let mut b = bonus;
+                if child.snakes[0].len() > st.snakes[0].len() {
+                    b += self.w.eat_early * EAT_DECAY.powi(ply as i32);
+                }
+                self.pv_max(helpers, &child, depth - 1, ply + 1, b)
+            }
+        };
+        if self.aborted {
+            return 0.0;
+        }
+        let mut v = first;
+        let mut best_code = code;
+        if depth >= SPLIT_DEPTH && r.total > 2 && !helpers.is_empty() {
+            self.share_killers(helpers);
+            let beta = AtomicU32::new(v.to_bits());
+            let next = AtomicUsize::new(1);
+            let work = |c: &mut Ctx<'a>| {
+                let local = State {
+                    rules: c.rules.clone(),
+                    ..st.clone()
+                };
+                let mut moves = [Dir::Up; 16];
+                moves[0] = my_move;
+                let mut best: Option<(f32, u32)> = None;
+                loop {
+                    let step = next.fetch_add(1, Ordering::Relaxed);
+                    if step >= r.total {
+                        return best;
+                    }
+                    let code = r.joint(step, &mut moves);
+                    let b = f32::from_bits(beta.load(Ordering::Relaxed));
+                    let val = c.child_value(&local, &moves[..n], depth, ply, -INF, b, bonus);
+                    if c.aborted {
+                        return best;
+                    }
+                    store_min(&beta, val);
+                    if val < b && best.is_none_or(|(x, _)| val < x) {
+                        best = Some((val, code));
+                    }
+                }
+            };
+            let mut found: Vec<(f32, u32)> = Vec::new();
+            std::thread::scope(|sc| {
+                let handles: Vec<_> = helpers
+                    .iter_mut()
+                    .map(|h| {
+                        let work = &work;
+                        sc.spawn(move || work(h))
+                    })
+                    .collect();
+                found.extend(work(self));
+                found.extend(handles.into_iter().filter_map(|h| h.join().unwrap()));
+            });
+            if helpers.iter().any(|h| h.aborted) {
+                self.aborted = true;
+            }
+            for (val, code) in found {
+                if val < v {
+                    v = val;
+                    best_code = code;
+                }
+            }
+        } else {
+            for step in 1..r.total {
+                let code = r.joint(step, &mut moves);
+                let val = self.child_value(st, &moves[..n], depth, ply, -INF, v, bonus);
+                if self.aborted {
+                    return 0.0;
+                }
+                if val < v {
+                    v = val;
+                    best_code = code;
+                }
+            }
+        }
+        if self.aborted {
+            return 0.0;
+        }
+        self.killer_opp[p] = best_code;
         v
     }
 }
@@ -417,9 +715,24 @@ pub fn search(st: &State, cfg: &SearchConfig, deadline: Instant) -> SearchResult
 
     // per root move context (keeps killers across iterations)
     let far = Instant::now() + Duration::from_secs(3600);
-    let mut ctxs: Vec<Ctx> = (0..n)
+    let pv_split = cfg.parallel && cfg.pv_split;
+    let pool = if pv_split { cfg.threads.max(1) } else { n };
+    let mut ctxs: Vec<Ctx> = (0..pool)
         .map(|_| {
-            let mut c = Ctx::new(w, far, &stop, start_opps, cfg.max_relevant, cfg.max_reach);
+            let rules = if cfg.parallel {
+                Arc::new((*st.rules).clone())
+            } else {
+                st.rules.clone()
+            };
+            let mut c = Ctx::new(
+                w,
+                far,
+                &stop,
+                start_opps,
+                cfg.max_relevant,
+                cfg.max_reach,
+                rules,
+            );
             if cfg.parallel {
                 c.shared_alpha = Some(&shared);
             }
@@ -445,7 +758,72 @@ pub fn search(st: &State, cfg: &SearchConfig, deadline: Instant) -> SearchResult
         // (value, exact): non-exact values are upper bounds (the move failed low)
         let mut res: Vec<Option<(f32, bool)>> = vec![None; n];
 
-        if cfg.parallel {
+        if pv_split {
+            let (main, helpers) = ctxs.split_first_mut().unwrap();
+            let local = State {
+                rules: main.rules.clone(),
+                ..st.clone()
+            };
+            let first = order[0];
+            let v = main.pv_min(helpers, &local, root[first], depth, 0, 0.0);
+            if !main.aborted {
+                res[first] = Some((v, true));
+                shared.store(v.to_bits(), Ordering::Relaxed);
+                let next = AtomicUsize::new(1);
+                let order = &order;
+                let root = &root;
+                let shared = &shared;
+                let next = &next;
+                let threads = 1 + helpers.len();
+                let work = |c: &mut Ctx| {
+                    let local = State {
+                        rules: c.rules.clone(),
+                        ..st.clone()
+                    };
+                    let mut out = Vec::new();
+                    loop {
+                        let k = next.fetch_add(1, Ordering::Relaxed);
+                        if k >= order.len() {
+                            return out;
+                        }
+                        let i = order[k];
+                        c.alpha_seen = -INF;
+                        let v = c.min_node(&local, root[i], depth, 0, -INF, INF, 0.0);
+                        if c.aborted {
+                            return out;
+                        }
+                        let exact = v > c.alpha_seen;
+                        if exact {
+                            store_max(shared, v);
+                        }
+                        out.push((i, (v, exact)));
+                    }
+                };
+                let mut out = Vec::new();
+                if n - 1 > 1 && threads > 1 && depth >= SPLIT_DEPTH {
+                    main.share_killers(helpers);
+                    std::thread::scope(|sc| {
+                        let handles: Vec<_> = helpers
+                            .iter_mut()
+                            .take(n - 2)
+                            .map(|h| {
+                                let work = &work;
+                                sc.spawn(move || work(h))
+                            })
+                            .collect();
+                        out.extend(work(main));
+                        for h in handles {
+                            out.extend(h.join().unwrap());
+                        }
+                    });
+                } else {
+                    out.extend(work(main));
+                }
+                for (i, r) in out {
+                    res[i] = Some(r);
+                }
+            }
+        } else if cfg.parallel {
             let shared = &shared;
             let results: Vec<(usize, Option<(f32, bool)>)> = std::thread::scope(|scope| {
                 let mut handles = Vec::new();
@@ -658,6 +1036,33 @@ mod tests {
         let r = best(&st, 100);
         assert!(!is_win(r.score), "{:?}", r);
         assert!(r.depth > 5, "{:?}", r);
+    }
+
+    #[test]
+    fn parallel_search_finds_the_sequential_value() {
+        for name in ["duel", "standard", "false_win_duel"] {
+            let js = std::fs::read_to_string(format!("tests/fixtures/{name}.json")).unwrap();
+            let st = serde_json::from_str::<crate::api::GameState>(&js)
+                .unwrap()
+                .to_state();
+            let weights = crate::weights_for(&st);
+            let far = Instant::now() + Duration::from_secs(600);
+            for depth in 1..=7 {
+                let seq = SearchConfig {
+                    weights: weights.clone(),
+                    parallel: false,
+                    max_depth: depth,
+                    ..Default::default()
+                };
+                let par = SearchConfig {
+                    parallel: true,
+                    threads: 4,
+                    ..seq.clone()
+                };
+                let (a, b) = (search(&st, &seq, far), search(&st, &par, far));
+                assert_eq!(a.score, b.score, "{name} depth {depth}: {a:?} {b:?}");
+            }
+        }
     }
 
     #[test]
