@@ -21,6 +21,8 @@ Vorhersage. Commits im Abstand von wenigen Stunden lassen sich in der Arena nich
 | 11-05 13:10 | Messung, kein Deploy | 54.3 (#16, 281) | 35.9 (#15, 274) | in Platzierung (9) | in Platzierung (9) | seit dem Leeres-Brett-Fix: Standard 8/9 Siege, Duel 6/8 |
 | 11-05 15:10 | Basis vor Royale-Profil | 54.2 (#17, 290) | 37.2 (#12, 283) | 28.0 (#17, 17) | 18.7 (#21, 18) | zum Vergleich nach dem Deploy; Metriken: Hungertode, Platzierung im Royale |
 | 11-06 09:25 | Basis vor Duell-Fix | 57.4 (#10, 368) | 40.1 (#10, 360) | 33.1 (#14, 98) | 20.9 (#18, 98) | zum Vergleich nach dem Deploy; Metriken: Duell-Siegquote, `gg`-Serien ohne Sieg (bisher 54 von 90 Duellen) |
+| 11-06 ~09:30–09:41 | `0357c78` deployt | – | – | – | – | Zeit aus dem Verhalten erschlossen, siehe Runde 6 |
+| 11-06 10:20 | Messung, kein Deploy | 57,7 (#10, 374) | 40,4 (#10, 364) | 33,6 (#14, 102) | 20,9 (101) | global 152,9 (#10), Spitze Snakes Alive 184,7 |
 
 Die globale Rangliste summiert die beste Wertung pro Leaderboard (fehlendes Board = 0).
 
@@ -104,14 +106,23 @@ Elo-Werte sind aus Self-Play, Variante (A) gegen die Basis (B). ✅ übernommen,
 
 ### Runde 6 (2026-11-06, läuft): Tempo und Testumgebung
 
-**Offen beim Wechsel auf den Laptop:**
-1. Prüfen, ob `0357c78` (Duell-Fix, Push 11-06 09:28 UTC) deployt ist, und die Deploy-Zeit in der Tabelle „Stand“ eintragen.
-2. Nach etwa 100 Duellen seit dem Deploy bewerten: Siegquote (vorher 67 %), `gg`-Serien ohne Sieg (54 von 90), Bilanz
-   gegen die Top 5 (0–9). Bis dahin nichts anderes deployen.
-3. `MOVE`-Logs vom Server holen: Tiefe bei einem Spiel gegen vier gleichzeitige Spiele. Der Server hat 8 Threads.
-4. `territory` im Duel mit mindestens 600 Spielen nachtesten (`{"opp_area":1.2,"length":10}`).
-5. Stellungstest vollständig laufen lassen, er wurde abgebrochen.
-6. Danach Punkt 3, 4, 5 unten.
+**Regel:** Erst wieder pushen, wenn die aktuelle Version genug gespielt hat und in der Arena stagniert. Nur so lässt sich
+sehen, ob eine neue Änderung wirklich besser ist. Lokale Kandidaten warten bis dahin.
+
+**Offen:**
+1. Frühestens ab 11-07 ~09:30 UTC (etwa 100 Duelle seit dem Deploy) `0357c78` bewerten: Siegquote (vorher 67 %), `gg`-Serien
+   ohne Sieg (54 von 90), Bilanz gegen die Top 5 (0–9). Pro Takt läuft etwa ein Duell.
+2. `MOVE`-Logs vom Server holen: Tiefe bei einem Spiel gegen vier gleichzeitige Spiele. Der Server hat 8 Threads.
+3. Kandidat `opp_area` 1.2 im Duel bis dahin weiter absichern, danach Punkt 3, 4, 5 unten.
+
+**Deploy von `0357c78` belegt:** `bench` des alten Stands `70e89ce` und des neuen auf allen Zügen der Duelle. Vor dem Push rief der
+Server in allen 20 Stellungen `gg`, in denen nur der alte Stand einen Sieg sieht (19 davon in `6bf4f36a`). Nach dem Push
+in keiner von 3 (`786ac65a` Zug 234 und 515, `3429c8f0` Zug 96). Bei 300 ms bleibt das stabil: alt Tiefe 3 und `999970`,
+neu Tiefe 12–15 und Score 82–268. Spätester Zeitpunkt ist `786ac65a` Zug 234 (Start 09:39:27).
+
+Timeout-Cluster, unbelegt: Um 09:25 gab es Timeouts in drei Spielen bei Zug 20–21, 26 und 36–40. Geschätzt aus Startzeit und
+Zugnummer liegen sie innerhalb weniger Sekunden, zwei andere Spiele im selben Takt blieben frei. Das Log vom 11-06 fand
+solche Häufungen bisher kaum, die genauen Zeiten fehlen noch.
 
 Tempo (Bench, 300 ms, 43 Arena-Stellungen, lokal):
 
@@ -136,8 +147,28 @@ Gegnerpool (`tools/gauntlet.sh`, 10 ms, Commit `0357c78`, Score der Basis):
 | long | 0,578 | 0,593 |
 | Mittel | 0,512 | 0,524 |
 
-Stellungstest (`tools/fetch_top.py`, `agree 100 8 all`, `tools/top_report.py`), Top-5-Züge in gewonnenen Partien. Nur Duel,
-Standard fehlt, Lauf abgebrochen: Übereinstimmung 63,6 %, Fehlgriffe 2,3 % (n = 2078). Zug < 25: 76,0 %, ab Zug 250: 60,6 %.
+Stellungstest (`tools/fetch_top.py`, `agree 100 8 all`, `tools/top_report.py`), Top-5-Züge in gewonnenen Partien. Ein früherer Lauf
+nur im Duel: 63,6 %, Fehlgriffe 2,3 % (n = 2078). Vollständiger Lauf mit `0357c78`, 219 Partien:
+
+| Modus | n | Übereinstimmung | Fehlgriffe | Zug < 25 | ab Zug 250 |
+|---|---|---|---|---|---|
+| Duel | 4236 | 62,8 % | 2,3 % | 72,0 % | 59,9 % |
+| Standard | 2520 | 63,1 % | 2,1 % | 63,8 % | 61,3 % |
+
+Kandidat Duel (das bisherige `opp_area` 0.6 wurde nur in 4er-Spielen getestet, Runde 2), Elo gegen die Produktiv-Gewichte:
+
+| Variante | Spiele | ms | Elo |
+|---|---|---|---|
+| `opp_area` 1.2 + `length` 10 | 800 (zwei Seeds) | 10 | +60 (Score 0,587) |
+| `opp_area` 1.2 + `length` 10 | 300 | 40 | **+94** |
+| `opp_area` 1.2 | 600 | 10 | +48 |
+| `length` 10 | 600 | 10 | +27 |
+
+Gegnerpool mit `opp_area` 1.2 + `length` 10 (je 200, 10 ms): self 0,555, hungry 0,662, territory 0,470, cautious 0,542, long
+0,700, Mittel **0,586** (Basis 0,512). Stellungstest gepaart (n = 4236): Übereinstimmung 62,6 % gegen 62,8 %, nur Kandidat 272,
+nur Basis 281, Fehlgriffe 2,1 % gegen 2,3 %, also neutral. Zug < 25: 68,8 % gegen 72,0 %, Fehlgriffe 1,1 % gegen 0,4 %.
+Beide Änderungen zusammen sind kaum besser als `opp_area` allein. Offen: `opp_area` 1.2 allein bei 40 ms, im Gegnerpool und im
+Stellungstest. `length` bleibt vorerst bei 25, weil Self-Play Futter-Schwächen nicht zeigt. ✅ Kandidat, nicht deployt.
 
 Nächste Ideen für Duel:
 - **Punkt 3:** Kipppunkte der Top-5-Niederlagen suchen (Score bleibt ab dort unter −30) und vergleichen: Fluchtwege, Engstellen, sicheres Gebiet.
