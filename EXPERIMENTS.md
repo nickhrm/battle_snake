@@ -113,7 +113,9 @@ sehen, ob eine neue Änderung wirklich besser ist. Lokale Kandidaten warten bis 
 1. Frühestens ab 11-07 ~09:30 UTC (etwa 100 Duelle seit dem Deploy) `0357c78` bewerten: Siegquote (vorher 67 %), `gg`-Serien
    ohne Sieg (54 von 90), Bilanz gegen die Top 5 (0–9). Pro Takt läuft etwa ein Duell.
 2. `MOVE`-Logs vom Server holen: Tiefe bei einem Spiel gegen vier gleichzeitige Spiele. Der Server hat 8 Threads.
-3. Kandidat `opp_area` 1.2 im Duel bis dahin weiter absichern, danach Punkt 3, 4, 5 unten.
+3. Duel-Kandidat `opp_area` 1.2 + `length` 10 mit neuem Seed bei 40 ms bestätigen.
+4. Constrictor-Messung reparieren (siehe unten), dann Hazard-Term für Royale und Kammerbaum für Constrictor.
+5. Danach Punkt 3 und 4 unten.
 
 **Deploy von `0357c78` belegt:** `bench` des alten Stands `70e89ce` und des neuen auf allen Zügen der Duelle. Vor dem Push rief der
 Server in allen 20 Stellungen `gg`, in denen nur der alte Stand einen Sieg sieht (19 davon in `6bf4f36a`). Nach dem Push
@@ -167,8 +169,43 @@ Kandidat Duel (das bisherige `opp_area` 0.6 wurde nur in 4er-Spielen getestet, R
 Gegnerpool mit `opp_area` 1.2 + `length` 10 (je 200, 10 ms): self 0,555, hungry 0,662, territory 0,470, cautious 0,542, long
 0,700, Mittel **0,586** (Basis 0,512). Stellungstest gepaart (n = 4236): Übereinstimmung 62,6 % gegen 62,8 %, nur Kandidat 272,
 nur Basis 281, Fehlgriffe 2,1 % gegen 2,3 %, also neutral. Zug < 25: 68,8 % gegen 72,0 %, Fehlgriffe 1,1 % gegen 0,4 %.
-Beide Änderungen zusammen sind kaum besser als `opp_area` allein. Offen: `opp_area` 1.2 allein bei 40 ms, im Gegnerpool und im
-Stellungstest. `length` bleibt vorerst bei 25, weil Self-Play Futter-Schwächen nicht zeigt. ✅ Kandidat, nicht deployt.
+
+`opp_area` 1.2 allein: 10 ms +48 (600), 40 ms +31 (600), Gegnerpool (je 200) self 0,530, hungry 0,552, territory 0,480, cautious
+0,550, long 0,595, Mittel 0,541. Stellungstest gepaart: 63,0 % gegen 62,8 %, Fehlgriffe 2,9 % gegen 2,3 %.
+
+**Stand:** Das Paar `opp_area` 1.2 + `length` 10 liegt lokal vor `opp_area` allein (40 ms +94 gegen +31, Pool 0,586 gegen 0,541,
+Fehlgriffe 2,1 % gegen 2,9 %). `length` 10 allein war bei 10 ms nur +27. Einwand: Zug < 25 wird im Stellungstest schlechter, und
+Self-Play zeigt Futter-Schwächen nicht (Runde 3). Vor dem Deploy das Paar mit neuem Seed und 600 Spielen bei 40 ms bestätigen.
+✅ Kandidat, nicht deployt.
+
+Gewichts-Serie (10 ms, gegen das Produktiv-Profil des Modus, je ein Seed):
+
+| Board | Spiele | Variante und Elo |
+|---|---|---|
+| Duel | 600 | `opp_area` 0.9 +21, 1.5 +47, 2.0 +49; `longest_bonus` 30 −4 |
+| Royale | 500 | `hazard_cell` 0.5 +9, `edge` 1.5 −8, `trap` 20 −16, `opp_area` 0.9 −8, `food_dist` 2.5 −4, `health` 0.45 +12 ➖ |
+| Standard | 500 | `opp_area_sum` 0.3 +9, 0.05 +3; `trap` 18 ±0, `edge` 4.5 −4, `longest_bonus` 30 +24 ➖ |
+
+Royale und Standard reagieren auf keine dieser Gewichte, dort braucht es neue Terme.
+
+**Constrictor-Self-Play ist so nicht verwertbar.** Die Werte springen, obwohl jeder Lauf 1000–3000 Spiele hat:
+
+| Variante | 10 ms | 40 ms |
+|---|---|---|
+| `opp_area` 0.7 | −121 (1000) | |
+| `opp_area` 1.5 | +131 (1000), +68 (3000, neuer Seed) | **−116** (1000) |
+| `opp_area` 2.0 | −6 (3000) | −23 (1000) |
+| `opp_area` 3.0 | **+240** (3000) | |
+| 1.5 + `opp_area_sum` 0.6 | −30 (3000) | |
+| 1.5 + `parity` 0.25 | +16 (3000) | |
+| 1.5 + `opp_area_sum` 0.6 + `parity` 0.25 | −9 (3000) | |
+| 2.0 + `parity` 0.25 | +41 (3000) | |
+
+Dazu schwankt der Remis-Anteil zwischen 0,1 % und 49 %, und die Vorzeichen kippen zwischen 10 und 40 ms. Vermutung, nicht geprüft:
+Ohne Futter ist das Spiel fast deterministisch, wenige Eröffnungslinien entscheiden, und die effektive Spielzahl liegt weit unter
+der nominellen. Das stellt auch den Constrictor-Eintrag `opp_area` 1.0 (+68) aus Runde 3 in Frage. ❌ Keine Constrictor-Gewichte
+übernehmen, bevor das geklärt ist: erst die Zahl verschiedener Partien zählen, dann mit zufälligen Startzügen oder gegen den
+Gegnerpool messen.
 
 Nächste Ideen für Duel:
 - **Punkt 3:** Kipppunkte der Top-5-Niederlagen suchen (Score bleibt ab dort unter −30) und vergleichen: Fluchtwege, Engstellen, sicheres Gebiet.
