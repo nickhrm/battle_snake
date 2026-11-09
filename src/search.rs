@@ -27,6 +27,10 @@ pub struct SearchConfig {
     pub max_reach: i32,
     /// sequential only: search every root move with a full window, for analysis
     pub exact_root: bool,
+    /// multi-player: from this ply on, only opponents whose head is within `deep_reach`
+    /// of ours get a full move set (the others play their heuristic move)
+    pub deep_ply: usize,
+    pub deep_reach: i32,
 }
 
 impl Default for SearchConfig {
@@ -38,6 +42,8 @@ impl Default for SearchConfig {
             max_relevant: 3,
             max_reach: 99,
             exact_root: false,
+            deep_ply: 99,
+            deep_reach: 2,
         }
     }
 }
@@ -67,6 +73,8 @@ struct Ctx<'a> {
     start_opps: usize,
     max_relevant: usize,
     max_reach: i32,
+    deep_ply: usize,
+    deep_reach: i32,
     killer_me: [u8; MAX_PLY],
     killer_opp: [u32; MAX_PLY],
     /// best exact root score found so far by any thread (f32 bits), parallel root only
@@ -96,6 +104,8 @@ impl<'a> Ctx<'a> {
             start_opps,
             max_relevant,
             max_reach,
+            deep_ply: 99,
+            deep_reach: 2,
             killer_me: [255; MAX_PLY],
             killer_opp: [u32::MAX; MAX_PLY],
             shared_alpha: None,
@@ -259,7 +269,10 @@ impl<'a> Ctx<'a> {
             nc += 1;
         }
         cand[..nc].sort_unstable();
-        let reach = (2 * depth as i32 + 1).min(self.max_reach);
+        let mut reach = (2 * depth as i32 + 1).min(self.max_reach);
+        if ply >= self.deep_ply && self.start_opps >= 2 {
+            reach = reach.min(self.deep_reach);
+        }
         for (rank, &(d, j)) in cand[..nc].iter().enumerate() {
             idxs[no] = j;
             // A proven win must not rest on a guessed move, so the last opponent is always
@@ -422,6 +435,8 @@ pub fn search(st: &State, cfg: &SearchConfig, deadline: Instant) -> SearchResult
     let mut ctxs: Vec<Ctx> = (0..n)
         .map(|_| {
             let mut c = Ctx::new(w, far, &stop, start_opps, cfg.max_relevant, cfg.max_reach);
+            c.deep_ply = cfg.deep_ply;
+            c.deep_reach = cfg.deep_reach;
             if cfg.parallel {
                 c.shared_alpha = Some(&shared);
             }

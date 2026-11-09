@@ -299,6 +299,8 @@ fn parse_args() -> Args {
             "--arel" => a.cfg.max_relevant = v().parse().unwrap(),
             "--brel" => b.cfg.max_relevant = v().parse().unwrap(),
             "--areach" => a.cfg.max_reach = v().parse().unwrap(),
+            "--adeep" => a.cfg.deep_ply = v().parse().unwrap(),
+            "--adeepreach" => a.cfg.deep_reach = v().parse().unwrap(),
             "--breach" => b.cfg.max_reach = v().parse().unwrap(),
             "--adepth" => a.cfg.max_depth = v().parse().unwrap(),
             "--bdepth" => b.cfg.max_depth = v().parse().unwrap(),

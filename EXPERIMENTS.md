@@ -24,6 +24,7 @@ Vorhersage. Commits im Abstand von wenigen Stunden lassen sich in der Arena nich
 | 11-06 ~09:30–09:41 | `0357c78` deployt | – | – | – | – | Zeit aus dem Verhalten erschlossen, siehe Runde 6 |
 | 11-06 10:20 | Messung, kein Deploy | 57,7 (#10, 374) | 40,4 (#10, 364) | 33,6 (#14, 102) | 20,9 (101) | global 152,9 (#10), Spitze Snakes Alive 184,7 |
 | 11-09 08:50 | Basis vor Duell-Abklingen | 55,8 (#14, 670) | 41,9 (#8, 656) | 35,2 (396) | 21,2 (411) | seit `0357c78`: Duell 145–149 (49 %), Standard 27 % Siege; Podium Duell 48,7, Standard 61,3 |
+| 11-09 10:15 | `7536b4c` deployt | – | – | – | – | Duell: Längen-Abklingen (Halbwertszeit 150, min. 30 %) |
 
 Die globale Rangliste summiert die beste Wertung pro Leaderboard (fehlendes Board = 0).
 
@@ -152,6 +153,27 @@ Fehlgriffe 3,0 % → **1,2 %**, ab Zug 250: 59,2 % → 61,4 %, Fehlgriffe 4,8 % 
 
 ✅ D ins Duell-Profil übernommen (wirkt auch im 4er-Endspiel mit einem Gegner). D+ verworfen: verliert gegen „territory“, kein
 Vorteil im Stellungstest erwartet. Arena-Metriken für die Bewertung: Siegquote gegen Rang 1–8, Niederlagen mit Längenvorsprung ≥ 5.
+
+Standard gegen ein gemischtes Feld (`--x {"food_dist":4,"hunger_health":70,"want_length_lead":8} --xreach 6`, 20 ms, je 400
+Partien, A gegen B nach Überlebensdauer, Rauschen etwa ±35):
+
+| Variante | Elo |
+|---|---|
+| `center` 1 / 2, `edge` 6 | −9 / +14, +14 |
+| `food_dist` 3, `center` 1 + `food_dist` 3 | −3, +10 |
+| Längen-Abklingen 150/0.3 | ±0 |
+| `mutual` −400 | −3 |
+| `max_reach` 4 / 6 / 8 | **−104 / −50 / −17** |
+| `max_relevant` 2 | +11 |
+| `max_reach` 6 + `center` 2 | −19 |
+| Paranoia nur bis Halbzug 1 / 2 / 3, danach nur Gegner mit Kopfabstand ≤ 2 voll (`deep_ply`) | −87 / −9 / −16 |
+| `deep_ply` 2 mit Abstand ≤ 4 / ohne Feld | −2 / +7 |
+
+Auch ein Mitte-Gewicht von 4 ändert in den Arena-Eröffnungen (`294815f0` Zug 2–12) kaum einen Zug. ❌ Für Standard nichts
+übernommen. Gewichte bewegen Standard nicht (wie in Runde 6), weniger Paranoia über den Heuristik-Zug `default_move` schadet auch
+gegen ein fremdes Feld. Nächster Ansatz: Den Heuristik-Zug der nicht durchgerechneten Gegner verbessern (eigenes Gebiet und
+Futter statt freier Nachbarfelder), erst dann Reichweite oder Tiefe wieder begrenzen. Alternativ Max-N für die Gegner, die
+nicht in Kopfnähe sind.
 
 ### Runde 6 (2026-11-06): Tempo und Testumgebung
 
