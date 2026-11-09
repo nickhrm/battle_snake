@@ -31,6 +31,13 @@ pub struct SearchConfig {
     /// of ours get a full move set (the others play their heuristic move)
     pub deep_ply: usize,
     pub deep_reach: i32,
+    /// the ply limit only applies while at least this many opponents are alive at the root
+    pub deep_min_opps: usize,
+    /// share of the time for a full paranoid search first, whose proven losses are vetoed
+    pub veto_frac: f32,
+    /// heuristic move for opponents outside the search: space, head danger and food
+    /// instead of free neighbours only
+    pub smart_default: bool,
 }
 
 impl Default for SearchConfig {
@@ -44,6 +51,9 @@ impl Default for SearchConfig {
             exact_root: false,
             deep_ply: 99,
             deep_reach: 2,
+            deep_min_opps: 2,
+            veto_frac: 0.0,
+            smart_default: false,
         }
     }
 }
@@ -75,6 +85,8 @@ struct Ctx<'a> {
     max_reach: i32,
     deep_ply: usize,
     deep_reach: i32,
+    deep_min_opps: usize,
+    smart_default: bool,
     killer_me: [u8; MAX_PLY],
     killer_opp: [u32; MAX_PLY],
     /// best exact root score found so far by any thread (f32 bits), parallel root only
@@ -106,6 +118,8 @@ impl<'a> Ctx<'a> {
             max_reach,
             deep_ply: 99,
             deep_reach: 2,
+            deep_min_opps: 2,
+            smart_default: false,
             killer_me: [255; MAX_PLY],
             killer_opp: [u32::MAX; MAX_PLY],
             shared_alpha: None,
@@ -206,34 +220,10 @@ impl<'a> Ctx<'a> {
         if n == 1 {
             return moves[0];
         }
-        let s = &st.snakes[j];
-        let r = &*st.rules;
-        let hungry = s.health < 40;
-        let mut best = moves[0];
-        let mut best_v = i32::MIN;
-        for &m in &moves[..n] {
-            let c = r.step(s.head(), m);
-            let mut v = 0;
-            for d in Dir::ALL {
-                let nb = r.step(c, d);
-                if nb != crate::game::NONE
-                    && !st.snakes.iter().any(|o| o.alive && o.body.contains(&nb))
-                {
-                    v += 10;
-                }
-            }
-            if st.has_food(c) && (hungry || s.len() < 8) {
-                v += 15;
-            }
-            if r.hazards[c as usize] > 0 {
-                v -= 20;
-            }
-            if v > best_v {
-                best_v = v;
-                best = m;
-            }
+        if self.smart_default && st.rules.bitboard {
+            return smart_move(st, j, &moves[..n]);
         }
-        best
+        simple_move(st, j, &moves[..n])
     }
 
     fn min_node(
@@ -270,7 +260,7 @@ impl<'a> Ctx<'a> {
         }
         cand[..nc].sort_unstable();
         let mut reach = (2 * depth as i32 + 1).min(self.max_reach);
-        if ply >= self.deep_ply && self.start_opps >= 2 {
+        if ply >= self.deep_ply && self.start_opps >= self.deep_min_opps.max(2) {
             reach = reach.min(self.deep_reach);
         }
         for (rank, &(d, j)) in cand[..nc].iter().enumerate() {
@@ -402,6 +392,166 @@ impl<'a> Ctx<'a> {
     }
 }
 
+/// The original heuristic move: free neighbours, food when hungry or short, no hazards.
+pub fn simple_move(st: &State, j: usize, moves: &[Dir]) -> Dir {
+        let s = &st.snakes[j];
+        let r = &*st.rules;
+        let hungry = s.health < 40;
+        let mut best = moves[0];
+        let mut best_v = i32::MIN;
+        for &m in moves {
+            let c = r.step(s.head(), m);
+            let mut v = 0;
+            for d in Dir::ALL {
+                let nb = r.step(c, d);
+                if nb != crate::game::NONE
+                    && !st.snakes.iter().any(|o| o.alive && o.body.contains(&nb))
+                {
+                    v += 10;
+                }
+            }
+            if st.has_food(c) && (hungry || s.len() < 8) {
+                v += 15;
+            }
+            if r.hazards[c as usize] > 0 {
+                v -= 20;
+            }
+            if v > best_v {
+                best_v = v;
+                best = m;
+            }
+        }
+        best
+}
+
+/// Heuristic move for snake `j` among its safe `moves` (bitboard boards only): avoid cells next
+/// to heads that win or tie a head-to-head, avoid pockets smaller than the body, go for food
+/// when hungry or short, and lean towards the centre.
+pub fn smart_move(st: &State, j: usize, moves: &[Dir]) -> Dir {
+    smart_move_p(st, j, moves, &SmartParams::default())
+}
+
+/// Tunable constants of [`smart_move`].
+#[derive(Clone, Debug)]
+pub struct SmartParams {
+    pub danger: f32,
+    pub trap: f32,
+    pub trap_cell: f32,
+    pub room: f32,
+    pub cap_extra: u32,
+    pub hunger_low: f32,
+    pub hunger_mid: f32,
+    pub hunger_full: f32,
+    pub eat: f32,
+    pub center: f32,
+}
+
+impl Default for SmartParams {
+    fn default() -> Self {
+        SmartParams {
+            danger: 60.0,
+            trap: 40.0,
+            trap_cell: 3.0,
+            room: 0.5,
+            cap_extra: 4,
+            hunger_low: 4.0,
+            hunger_mid: 2.0,
+            hunger_full: 0.5,
+            eat: 3.0,
+            center: 0.25,
+        }
+    }
+}
+
+pub fn smart_move_p(st: &State, j: usize, moves: &[Dir], p: &SmartParams) -> Dir {
+    let r = &*st.rules;
+    let s = &st.snakes[j];
+    let len = s.len();
+    // cells that stay blocked next turn: every body segment except tails that move away
+    let mut blocked: u128 = 0;
+    let mut danger: u128 = 0;
+    for (k, o) in st.snakes.iter().enumerate() {
+        if !o.alive {
+            continue;
+        }
+        let keep = if o.tail_moves() { o.len() - 1 } else { o.len() };
+        for &c in o.body.iter().take(keep) {
+            blocked |= 1u128 << c;
+        }
+        if k != j && o.len() >= len {
+            danger |= r.bb_expand(1u128 << o.head());
+        }
+    }
+    let mut food_bb: u128 = 0;
+    for &f in &st.food {
+        food_bb |= 1u128 << f;
+    }
+    let max_other = st
+        .snakes
+        .iter()
+        .enumerate()
+        .filter(|(k, o)| *k != j && o.alive)
+        .map(|(_, o)| o.len())
+        .max()
+        .unwrap_or(0);
+    let hunger = if s.health < 30 {
+        p.hunger_low
+    } else if s.health < 60 || len <= max_other + 1 {
+        p.hunger_mid
+    } else {
+        p.hunger_full
+    };
+    let free = r.full_bb & !blocked;
+    let cap = len as u32 + p.cap_extra;
+    let mut best = moves[0];
+    let mut best_v = f32::MIN;
+    for &m in moves {
+        let c = r.step(s.head(), m);
+        let cb = 1u128 << c;
+        let mut v = 0.0f32;
+        if danger & cb != 0 {
+            v -= p.danger;
+        }
+        // bounded flood fill: room reachable from the new head, and the distance to food
+        let mut seen = cb;
+        let mut frontier = cb;
+        let mut food_d = if food_bb & cb != 0 { 0 } else { 99 };
+        let mut steps = 0;
+        while frontier != 0 && seen.count_ones() < cap && steps < 12 {
+            steps += 1;
+            frontier = r.bb_expand(frontier) & free & !seen;
+            seen |= frontier;
+            if food_d == 99 && frontier & food_bb != 0 {
+                food_d = steps;
+            }
+        }
+        let room = seen.count_ones();
+        if room < len as u32 {
+            v -= p.trap + p.trap_cell * (len as u32 - room) as f32;
+        }
+        v += room.min(cap) as f32 * p.room;
+        if food_d < 99 {
+            v -= hunger * food_d as f32;
+            if food_d == 0 {
+                v += p.eat * hunger;
+            }
+        } else {
+            v -= hunger * 14.0;
+        }
+        let (x, y) = r.xy(c);
+        let dc = (2 * x - (r.width - 1)).abs() + (2 * y - (r.height - 1)).abs();
+        v -= p.center * dc as f32;
+        if r.hazards[c as usize] > 0 {
+            v -= 20.0;
+        }
+        if v > best_v {
+            best_v = v;
+            best = m;
+        }
+    }
+    best
+}
+
 /// Pick a move. `deadline` is a hard limit; depth 1 is always completed.
 pub fn search(st: &State, cfg: &SearchConfig, deadline: Instant) -> SearchResult {
     let mut root = [Dir::Up; 4];
@@ -425,6 +575,48 @@ pub fn search(st: &State, cfg: &SearchConfig, deadline: Instant) -> SearchResult
             scores: vec![(root[0], 0.0)],
         };
     }
+    let opps = st.alive_opponents();
+    let limited = cfg.deep_ply < 99 && opps >= cfg.deep_min_opps.max(2);
+    if !limited || cfg.veto_frac <= 0.0 {
+        return search_root(st, cfg, deadline, &root[..n]);
+    }
+    // Phase 1: the full paranoid search vetoes root moves it proves lost. The limited search
+    // plays better positionally but cannot see traps set by opponents away from our head.
+    let now = Instant::now();
+    let d1 = now + deadline.saturating_duration_since(now).mul_f32(cfg.veto_frac);
+    let full = SearchConfig {
+        deep_ply: 99,
+        ..cfg.clone()
+    };
+    let r1 = search_root(st, &full, d1, &root[..n]);
+    if is_win(r1.score) {
+        return r1;
+    }
+    let allowed: Vec<Dir> = r1
+        .scores
+        .iter()
+        .filter(|(_, v)| !is_loss(*v))
+        .map(|(m, _)| *m)
+        .collect();
+    if allowed.len() == 1 {
+        return SearchResult {
+            best: allowed[0],
+            ..r1
+        };
+    }
+    let moves: &[Dir] = if allowed.is_empty() { &root[..n] } else { &allowed };
+    let mut r2 = search_root(st, cfg, deadline, moves);
+    r2.nodes += r1.nodes;
+    for &(m, v) in &r1.scores {
+        if !r2.scores.iter().any(|x| x.0 == m) {
+            r2.scores.push((m, v));
+        }
+    }
+    r2
+}
+
+fn search_root(st: &State, cfg: &SearchConfig, deadline: Instant, root: &[Dir]) -> SearchResult {
+    let n = root.len();
     let start_opps = st.alive_opponents();
     let stop = AtomicBool::new(false);
     let shared = AtomicU32::new((-INF).to_bits());
@@ -437,6 +629,8 @@ pub fn search(st: &State, cfg: &SearchConfig, deadline: Instant) -> SearchResult
             let mut c = Ctx::new(w, far, &stop, start_opps, cfg.max_relevant, cfg.max_reach);
             c.deep_ply = cfg.deep_ply;
             c.deep_reach = cfg.deep_reach;
+            c.deep_min_opps = cfg.deep_min_opps;
+            c.smart_default = cfg.smart_default;
             if cfg.parallel {
                 c.shared_alpha = Some(&shared);
             }

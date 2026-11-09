@@ -64,11 +64,14 @@ pub fn profile(st: &State) -> Weights {
 }
 
 pub fn config_for(st: &State, parallel: bool) -> SearchConfig {
-    SearchConfig {
+    // The ply limit with veto (deep_ply 2, deep_min_opps 3, veto_frac 0.35) moved our standard
+    // openings off the walls, but showed no gain in self-play (EXPERIMENTS.md, round 7): off.
+    let cfg = SearchConfig {
         weights: weights_for(st),
         parallel,
         ..SearchConfig::default()
-    }
+    };
+    cfg
 }
 
 #[cfg(test)]

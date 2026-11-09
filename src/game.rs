@@ -50,6 +50,10 @@ pub struct Rules {
     pub hazard_bb: u128,
     /// cells with even x + y (only valid when `bitboard` is true); set by `finalize`
     pub even_bb: u128,
+    /// all cells / cells not in the first column / not in the last column (bitboard only)
+    pub full_bb: u128,
+    pub not_col0_bb: u128,
+    pub not_col_last_bb: u128,
     /// board fits into a u128 and is not wrapped -> fast bitboard evaluation
     pub bitboard: bool,
     /// neighbour table: nbr[cell*4 + dir] (NONE if off-board)
@@ -97,6 +101,9 @@ impl Rules {
             hazards: vec![0; cells],
             hazard_bb: 0,
             even_bb: 0,
+            full_bb: 0,
+            not_col0_bb: 0,
+            not_col_last_bb: 0,
             bitboard: cells <= 128 && !wrapped,
             nbr,
         }
@@ -107,6 +114,15 @@ impl Rules {
         self.hazard_bb = 0;
         if self.bitboard {
             self.even_bb = 0;
+            let n = self.cells() as u32;
+            self.full_bb = if n == 128 { u128::MAX } else { (1u128 << n) - 1 };
+            let (mut c0, mut cl) = (0u128, 0u128);
+            for y in 0..self.height {
+                c0 |= 1u128 << self.cell(0, y);
+                cl |= 1u128 << self.cell(self.width - 1, y);
+            }
+            self.not_col0_bb = self.full_bb & !c0;
+            self.not_col_last_bb = self.full_bb & !cl;
             for y in 0..self.height {
                 for x in 0..self.width {
                     if (x + y) % 2 == 0 {
@@ -154,6 +170,16 @@ impl Rules {
             dy = dy.min(self.height - dy);
         }
         dx + dy
+    }
+
+    /// Bitboard of all 4-neighbours of `b` (only valid when `bitboard` is true).
+    #[inline]
+    pub fn bb_expand(&self, b: u128) -> u128 {
+        let w = self.width as u32;
+        ((b << w) & self.full_bb)
+            | (b >> w)
+            | ((b >> 1) & self.not_col_last_bb)
+            | ((b << 1) & self.not_col0_bb)
     }
 
     pub fn has_hazards(&self) -> bool {

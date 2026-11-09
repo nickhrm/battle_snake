@@ -299,7 +299,11 @@ fn parse_args() -> Args {
             "--arel" => a.cfg.max_relevant = v().parse().unwrap(),
             "--brel" => b.cfg.max_relevant = v().parse().unwrap(),
             "--areach" => a.cfg.max_reach = v().parse().unwrap(),
+            "--asmart" => a.cfg.smart_default = true,
+            "--bsmart" => b.cfg.smart_default = true,
             "--adeep" => a.cfg.deep_ply = v().parse().unwrap(),
+            "--aveto" => a.cfg.veto_frac = v().parse().unwrap(),
+            "--adeepopps" => a.cfg.deep_min_opps = v().parse().unwrap(),
             "--adeepreach" => a.cfg.deep_reach = v().parse().unwrap(),
             "--breach" => b.cfg.max_reach = v().parse().unwrap(),
             "--adepth" => a.cfg.max_depth = v().parse().unwrap(),
@@ -314,6 +318,7 @@ fn parse_args() -> Args {
         let mut p = b.clone();
         p.cfg.weights = parse_weights(&js, mode);
         p.cfg.max_reach = x_reach;
+        p.cfg.smart_default = std::env::var("XSMART").is_ok();
         p.greedy = x_greedy;
         p
     });

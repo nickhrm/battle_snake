@@ -175,6 +175,26 @@ gegen ein fremdes Feld. Nächster Ansatz: Den Heuristik-Zug der nicht durchgerec
 Futter statt freier Nachbarfelder), erst dann Reichweite oder Tiefe wieder begrenzen. Alternativ Max-N für die Gegner, die
 nicht in Kopfnähe sind.
 
+Gegner-Heuristik und Stellungstest Standard (nach den Feld-Tests oben):
+
+- Neue Heuristik `smart_move` für nicht durchgerechnete Gegner (Kopf-Gefahr, begrenzte Flutfüllung, Futterweg, Mitte).
+  Sagt echte Arena-Züge besser voraus (`src/bin/policy.rs`, 4er-Partien, Stellungen mit ≥ 2 sicheren Zügen, n = 108k): 45,9 % →
+  56,2 %, mit Tuning 56,9 %. Im Feld-Self-Play aber −32 (allein) und −96 (mit `max_reach` 6), je 400. ❌ Bleibt aus
+  (`smart_default`). Self-Play misst nur gegen unsere eigene Engine, eine bessere Nachbildung echter Gegner kann sich dort nicht
+  zeigen.
+- Stellungstest Standard (`agree` 50 ms, Züge der Top 5 in gewonnenen 4er-Partien, 266 Partien, n ≈ 17 500 gepaart, Basis 61,9 %):
+  Mitte 2, Rand 6, Futter 3, Längen-Abklingen, `smart` alle ±0,3 Punkte. `max_relevant` 2: 62,3 % (z = +2,0).
+  Randzüge in Zug < 30: Basis 18,0 %, Spitze 12,8 %, Gewichte 17,2–18,1 %. Die Ursache ist die Paranoia, nicht die Gewichte.
+- `deep_ply` 2 (ab Halbzug 2 nur Gegner mit Kopfabstand ≤ 2 voll): Rand 12,5 %, aber mit 4 lebenden Schlangen besser (62,3 % gegen
+  59,9 %), mit 3 schlechter (59,9 % gegen 62,9 %, Fehlgriffe 4,1 % gegen 2,3 %). Daher `deep_min_opps` 3: gesamt **62,5 %
+  (z = +2,8)**, Zug < 50 63,3 % gegen 60,9 %, Rand **12,8 %**, Fehlgriffe mit 4 Schlangen 2,0 % gegen 1,3 %. Tiefe in Arena-
+  Eröffnungen 6–7 → 10–12. Feld-Self-Play 20 ms: +10 und ohne Feld +9 (je 600), 40 ms: −20 (300).
+- Die gelockerte Suche übersieht Fallen von Gegnern in 3 Feldern Abstand (`3c4b9bf1` Zug 60: spielt „down“, die volle Suche beweist
+  dort den Verlust). Darum `veto_frac` 0.35: Die volle Suche bekommt 35 % der Zeit, ihre bewiesenen Verluste sind gesperrt.
+  Stellungstest 62,2 % (z = +1,4), Rand 14,0 %, Fehlgriffe mit 4 Schlangen 1,8 %. Feld-Self-Play 40 ms −13 (600), 100 ms −10 (300).
+  ➖ Nicht übernommen: verhält sich näher an der Spitze, ein Gewinn ist aber nirgends messbar. Schalter bleiben im Code
+  (`deep_ply`, `deep_min_opps`, `veto_frac`, aus). Arena-Test nur als bewusstes Experiment.
+
 ### Runde 6 (2026-11-06): Tempo und Testumgebung
 
 **Regel:** Erst wieder pushen, wenn die aktuelle Version genug gespielt hat und in der Arena stagniert. Nur so lässt sich

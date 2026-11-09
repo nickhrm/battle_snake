@@ -37,6 +37,41 @@ fn api_snake(s: &Value) -> Value {
            "body": body, "latency": "0", "shout": ""})
 }
 
+/// Variant overrides for experiments: AGREE_W (partial weights JSON on top of the profile),
+/// AGREE_SMART=1, AGREE_REACH=<n>, AGREE_DEEP=<ply>, AGREE_DEEPREACH=<n>, AGREE_REL=<n>.
+fn apply_env(cfg: &mut honey_badger::search::SearchConfig) {
+    if let Ok(js) = std::env::var("AGREE_W") {
+        let mut v = serde_json::to_value(&cfg.weights).unwrap();
+        let over: Value = serde_json::from_str(&js).expect("AGREE_W must be JSON");
+        for (k, x) in over.as_object().unwrap() {
+            v[k] = x.clone();
+        }
+        cfg.weights = serde_json::from_value(v).unwrap();
+    }
+    let num = |k: &str| std::env::var(k).ok().and_then(|x| x.parse::<i64>().ok());
+    if num("AGREE_SMART") == Some(1) {
+        cfg.smart_default = true;
+    }
+    if let Some(x) = num("AGREE_REACH") {
+        cfg.max_reach = x as i32;
+    }
+    if let Some(x) = num("AGREE_DEEP") {
+        cfg.deep_ply = x as usize;
+    }
+    if let Some(x) = num("AGREE_DEEPREACH") {
+        cfg.deep_reach = x as i32;
+    }
+    if let Some(x) = num("AGREE_DEEPOPPS") {
+        cfg.deep_min_opps = x as usize;
+    }
+    if let Ok(x) = std::env::var("AGREE_VETO") {
+        cfg.veto_frac = x.parse().unwrap();
+    }
+    if let Some(x) = num("AGREE_REL") {
+        cfg.max_relevant = x as usize;
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let ms: u64 = args[0].parse().unwrap();
@@ -96,6 +131,7 @@ fn main() {
                         let st = gs.to_state();
                         let mut cfg = config_for(&st, false);
                         cfg.exact_root = true;
+                        apply_env(&mut cfg);
                         let r = search(&st, &cfg, Instant::now() + Duration::from_millis(ms));
                         if r.depth == 0 {
                             continue; // forced move
