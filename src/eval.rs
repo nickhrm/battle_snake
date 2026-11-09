@@ -55,6 +55,17 @@ pub struct Weights {
     /// assumed distance to the next food once the board is empty. The search spawns no
     /// food, but the rules do, so an empty board must not read as starvation.
     pub food_empty: f32,
+    /// half-life in turns of the length terms (0 = no decay). Late in the game space decides,
+    /// and a long body is a liability rather than an asset.
+    pub length_half: f32,
+    /// lower bound of the length decay factor
+    pub length_min: f32,
+    /// 1 = the eating bonus in the search only counts while we want food
+    pub eat_want: f32,
+    /// value of our share of the territory against the strongest opponent, cubed (x100)
+    pub area_ratio: f32,
+    /// penalty per step of head distance from the board centre
+    pub center: f32,
 }
 
 impl Default for Weights {
@@ -81,6 +92,11 @@ impl Default for Weights {
             length_each: 0.0,
             mutual: 0.0,
             food_empty: 6.0,
+            length_half: 0.0,
+            length_min: 0.0,
+            eat_want: 0.0,
+            area_ratio: 0.0,
+            center: 0.0,
         }
     }
 }
@@ -410,6 +426,29 @@ fn voronoi_bb_w<const W: u32>(st: &State, hazard_value: f32, parity: f32) -> Vor
     out
 }
 
+#[inline]
+pub fn length_factor(st: &State, w: &Weights) -> f32 {
+    if w.length_half > 0.0 {
+        (0.5f32).powf(st.turn as f32 / w.length_half).max(w.length_min)
+    } else {
+        1.0
+    }
+}
+
+/// Whether snake 0 is looking for food (same rule as the food term in [`evaluate`]).
+pub fn wants_food(st: &State, w: &Weights) -> bool {
+    let me = st.me();
+    let my_len = me.len() as i32;
+    let max_opp = st
+        .snakes
+        .iter()
+        .skip(1)
+        .filter(|s| s.alive)
+        .map(|s| s.len() as i32)
+        .max();
+    me.health < w.hunger_health || matches!(max_opp, Some(m) if my_len < m + w.want_length_lead)
+}
+
 pub fn evaluate(st: &State, w: &Weights) -> f32 {
     let vor = voronoi_p(st, w.hazard_cell, w.parity);
     let rules = &*st.rules;
@@ -442,14 +481,23 @@ pub fn evaluate(st: &State, w: &Weights) -> f32 {
         score -= w.trap * (my_len - room) as f32;
     }
 
+    if w.area_ratio != 0.0 && opps > 0 {
+        let tot = my_area + max_opp_area;
+        if tot > 0.0 {
+            let r = my_area / tot;
+            score += w.area_ratio * 100.0 * r * r * r;
+        }
+    }
+
     if !rules.constrictor {
         if opps > 0 {
+            let f = length_factor(st, w);
             let diff = (my_len - max_opp_len) as f32;
-            score += w.length * diff.clamp(-w.length_cap, w.length_cap);
+            score += f * w.length * diff.clamp(-w.length_cap, w.length_cap);
             if my_len > max_opp_len {
-                score += w.longest_bonus;
+                score += f * w.longest_bonus;
             }
-            score += w.length_each * each;
+            score += f * w.length_each * each;
         }
         score += w.food_owned * vor.food_cnt[0] as f32;
 
@@ -483,6 +531,11 @@ pub fn evaluate(st: &State, w: &Weights) -> f32 {
 
     score -= w.opp_alive * opps as f32;
 
+    if w.center != 0.0 && !rules.wrapped {
+        let (x, y) = rules.xy(me.head());
+        let d = (2 * x - (rules.width - 1)).abs() + (2 * y - (rules.height - 1)).abs();
+        score -= w.center * d as f32 * 0.5;
+    }
     if w.edge != 0.0 && !rules.wrapped {
         let (x, y) = rules.xy(me.head());
         if x == 0 || y == 0 || x == rules.width - 1 || y == rules.height - 1 {

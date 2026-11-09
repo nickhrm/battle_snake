@@ -220,6 +220,9 @@ struct Args {
     verbose: bool,
     timeout: u64,
     dump: Option<String>,
+    /// optional field snake: in 4-player games seats 2 and 3 play this config, and A is
+    /// scored against B by who survived longer
+    x: Option<Player>,
 }
 
 /// `s` overrides the production weights of the mode, so a test sees what the server plays.
@@ -258,6 +261,9 @@ fn parse_args() -> Args {
     let mut dump: Option<String> = None;
     let mut a_json = "{}".to_string();
     let mut b_json = "{}".to_string();
+    let mut x_json: Option<String> = None;
+    let mut x_reach = 99;
+    let mut x_greedy = false;
     while let Some(k) = it.next() {
         let mut v = || it.next().expect("missing value");
         match k.as_str() {
@@ -282,6 +288,9 @@ fn parse_args() -> Args {
             "--bms" => b.ms = v().parse().unwrap(),
             "--a" => a_json = v(),
             "--b" => b_json = v(),
+            "--x" => x_json = Some(v()),
+            "--xreach" => x_reach = v().parse().unwrap(),
+            "--xgreedy" => x_greedy = true,
             "--bgreedy" => b.greedy = true,
             "--bhttp" => b.http = Some(v()),
             "--timeout" => timeout = v().parse().unwrap(),
@@ -299,7 +308,15 @@ fn parse_args() -> Args {
     }
     a.cfg.weights = parse_weights(&a_json, mode);
     b.cfg.weights = parse_weights(&b_json, mode);
+    let x = x_json.map(|js| {
+        let mut p = b.clone();
+        p.cfg.weights = parse_weights(&js, mode);
+        p.cfg.max_reach = x_reach;
+        p.greedy = x_greedy;
+        p
+    });
     Args {
+        x,
         mode,
         games,
         threads,
@@ -472,11 +489,18 @@ fn play(
     timeout: u64,
     timeouts: &AtomicUsize,
     hist: &mut VecDeque<State>,
+    died: &mut Vec<u32>,
 ) -> (Option<usize>, u32) {
     let mut w = World::new(mode, players.len(), seed);
     let game_id = format!("sim-{seed}-{}", rand::random::<u32>());
     let n = players.len();
+    *died = vec![u32::MAX; n];
     loop {
+        for i in 0..n {
+            if !w.st.snakes[i].alive && died[i] == u32::MAX {
+                died[i] = w.st.turn;
+            }
+        }
         let alive = w.st.alive_count();
         if alive == 0 {
             return (None, w.st.turn);
@@ -546,19 +570,38 @@ fn main() {
                 }
                 // alternate seats so both configs get every start position
                 let a_first = g % 2 == 0;
-                let players: Vec<Player> = (0..n)
-                    .map(|i| {
-                        if (i % 2 == 0) == a_first {
-                            args.a.clone()
+                // with a field snake: A and B take seats 0/1 or 2/3 (swapped every game), X the rest;
+                // the seat pairs alternate over four games so both see every start position
+                let field = args.x.is_some() && n == 4;
+                let seat_of = |i: usize| -> u8 {
+                    if field {
+                        let pair = (g / 2) % 2; // which pair of seats A/B use
+                        if i / 2 != pair {
+                            2
+                        } else if (i % 2 == 0) == a_first {
+                            0
                         } else {
-                            args.b.clone()
+                            1
                         }
+                    } else if (i % 2 == 0) == a_first {
+                        0
+                    } else {
+                        1
+                    }
+                };
+                let players: Vec<Player> = (0..n)
+                    .map(|i| match seat_of(i) {
+                        0 => args.a.clone(),
+                        1 => args.b.clone(),
+                        _ => args.x.clone().unwrap(),
                     })
                     .collect();
-                let is_a: Vec<bool> = (0..n).map(|i| (i % 2 == 0) == a_first).collect();
+                let is_a: Vec<bool> = (0..n).map(|i| seat_of(i) == 0).collect();
+                let is_b: Vec<bool> = (0..n).map(|i| seat_of(i) == 1).collect();
                 let seed = args.seed.wrapping_mul(1_000_003).wrapping_add(g as u64 / 2);
                 let mut hist = VecDeque::new();
-                let (winner, turns) = play(&players, args.mode, seed, args.verbose, args.timeout, &timeouts, &mut hist);
+                let mut died = Vec::new();
+                let (winner, turns) = play(&players, args.mode, seed, args.verbose, args.timeout, &timeouts, &mut hist, &mut died);
                 if let Some(dir) = &args.dump {
                     // dump the last positions of every A snake that died
                     let a_won = matches!(winner, Some(wi) if is_a[wi]);
@@ -576,10 +619,22 @@ fn main() {
                     }
                 }
                 let mut r = res.lock().unwrap();
-                match winner {
-                    Some(wi) if is_a[wi] => r.0 += 1,
-                    Some(_) => r.1 += 1,
-                    None => r.2 += 1,
+                if field {
+                    let da = (0..n).filter(|&i| is_a[i]).map(|i| died[i]).max().unwrap();
+                    let db = (0..n).filter(|&i| is_b[i]).map(|i| died[i]).max().unwrap();
+                    let da = if matches!(winner, Some(wi) if is_a[wi]) { u32::MAX } else { da };
+                    let db = if matches!(winner, Some(wi) if is_b[wi]) { u32::MAX } else { db };
+                    match da.cmp(&db) {
+                        std::cmp::Ordering::Greater => r.0 += 1,
+                        std::cmp::Ordering::Less => r.1 += 1,
+                        _ => r.2 += 1,
+                    }
+                } else {
+                    match winner {
+                        Some(wi) if is_a[wi] => r.0 += 1,
+                        Some(_) => r.1 += 1,
+                        None => r.2 += 1,
+                    }
                 }
                 r.3 += turns as u64;
             });

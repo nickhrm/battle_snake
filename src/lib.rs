@@ -46,8 +46,14 @@ pub fn profile(st: &State) -> Weights {
         };
     }
     if opps <= 1 {
-        // duel
-        return w;
+        // duel: the value of length fades with the turn number (half-life 150 turns, at least
+        // 30 %). A long body late in the game costs room, and the duels we lost late were
+        // mostly lost with a big length lead.
+        return Weights {
+            length_half: 150.0,
+            length_min: 0.3,
+            ..w
+        };
     }
     // multi-player: being pinned to the wall / boxed in by bigger snakes is the main way we die
     Weights {

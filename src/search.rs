@@ -363,7 +363,9 @@ impl<'a> Ctx<'a> {
                 Some(t) => t,
                 None => {
                     let mut b = bonus;
-                    if child.snakes[0].len() > st.snakes[0].len() {
+                    if child.snakes[0].len() > st.snakes[0].len()
+                        && (self.w.eat_want == 0.0 || crate::eval::wants_food(st, self.w))
+                    {
                         b += self.w.eat_early * EAT_DECAY.powi(ply as i32);
                     }
                     self.max_node(&child, depth - 1, ply + 1, alpha, beta.min(v), b)

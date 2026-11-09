@@ -23,6 +23,7 @@ Vorhersage. Commits im Abstand von wenigen Stunden lassen sich in der Arena nich
 | 11-06 09:25 | Basis vor Duell-Fix | 57.4 (#10, 368) | 40.1 (#10, 360) | 33.1 (#14, 98) | 20.9 (#18, 98) | zum Vergleich nach dem Deploy; Metriken: Duell-Siegquote, `gg`-Serien ohne Sieg (bisher 54 von 90 Duellen) |
 | 11-06 ~09:30–09:41 | `0357c78` deployt | – | – | – | – | Zeit aus dem Verhalten erschlossen, siehe Runde 6 |
 | 11-06 10:20 | Messung, kein Deploy | 57,7 (#10, 374) | 40,4 (#10, 364) | 33,6 (#14, 102) | 20,9 (101) | global 152,9 (#10), Spitze Snakes Alive 184,7 |
+| 11-09 08:50 | Basis vor Duell-Abklingen | 55,8 (#14, 670) | 41,9 (#8, 656) | 35,2 (396) | 21,2 (411) | seit `0357c78`: Duell 145–149 (49 %), Standard 27 % Siege; Podium Duell 48,7, Standard 61,3 |
 
 Die globale Rangliste summiert die beste Wertung pro Leaderboard (fehlendes Board = 0).
 
@@ -104,7 +105,55 @@ Arena-Profil: <https://arena.battlesnake.com/battlesnakes/837dbb1c-2781-4e13-8b3
 Elo-Werte sind aus Self-Play, Variante (A) gegen die Basis (B). ✅ übernommen, ❌ verworfen,
 ➖ neutral bzw. nicht übernommen.
 
-### Runde 6 (2026-11-06, läuft): Tempo und Testumgebung
+### Runde 7 (2026-11-09): Arena seit `0357c78` und Längen-Abklingen im Duell
+
+Arena seit dem Deploy (11-06 09:45 bis 11-09 08:00, 295 Duelle, 299 Standard-Partien). Die Siegquoten fielen (Duell 67 % → 49 %,
+Standard 39 % → 27 %), vor allem weil das Matchmaking jetzt stärkere Gegner zuteilt (Duell: 50 Spiele gegen die Top 3, vorher 6).
+Duell gegen die Spitze: Bwukinator 0–15, Odiodin 3–14, rattler 3–19, NMC² 9–9, AlphaSlinky 12–15.
+
+Befunde Duell:
+- In 72 von 149 Niederlagen blieb der Score (Suche mit 50 ms, `agree`) bis weniger als 25 Züge vor dem Ende positiv. 32 davon mit
+  mindestens +5 Länge, mehrere mit +17 bis +37. Beispiel `24487783`: Zug 362, Länge 38 gegen 17, Score +250 in Tiefe 17, danach
+  schließt der Gegner die Tür. Die Längenterme (bis 265 Punkte) überdecken jeden Platzverlust (±30–50).
+- 41 Niederlagen gegen die Top 5 waren schon ab Zug 2–50 dauerhaft im Minus. Die Top 5 liegen bis Zug 20 im Schnitt 0,6 Länge vorn
+  (gegen den Rest liegen wir vorn). Offen.
+- Die Niederlage ist im Median 15 Züge vor dem Tod bewiesen (`ouch` oder erzwungen), der Fehler liegt also jenseits des Horizonts.
+- Latenz: p50 381 ms, p99,9 446 ms, 94 Timeouts in 162k Zügen. Mehr Budget (400 ms) brächte etwa 28 Timeouts mehr für +0,15 Halbzüge. ➖
+
+Befunde Standard (noch ohne Änderung):
+- Randanteil in Zug 0–25: 41 % gegen 10–23 % bei allen starken Gegnern, Abstand zur Mitte der höchste im Feld. 171 von 217 Toden
+  innerhalb eines Feldes von der Wand. Alle 67 Kopf-an-Kopf-Tode erzwungen und gegen größere Köpfe.
+- Länge bei Zug 100: −3,4 zum Längsten, schlechtester Wert im Feld. 18 Hungertode, davon 6 mit Länge 4 bei Zug 102.
+- Vermutung: Die paranoide Suche hält Rand und Ecke für sicher, weil dort weniger Gegner gemeinsam angreifen können.
+
+Was die Spitze macht: Ihr Code ist nicht öffentlich. `snork` (früher Platz 1–2, MIT, nur gelesen, nicht ausgeführt) lässt den
+Längenvorteil mit der Zugzahl verfallen (`size_adv_decay`) und wertet später fast nur den Platzanteil.
+
+Neue Gewichte: `length_half`/`length_min` (Abklingen aller Längenterme), `eat_want`, `area_ratio`, `center`. Die Sim kann mit
+`--x <json>` in 4er-Partien zwei Feld-Schlangen setzen und wertet dann A gegen B nach Überlebensdauer (`--xreach`, `--xgreedy`).
+
+Duell, gegen das Produktiv-Profil:
+
+| Variante | ms | Spiele | Elo |
+|---|---|---|---|
+| `length_half` 150, `length_min` 0.3 | 20 | 160 / 300 (zwei Seeds) | **+103 / +88** |
+| `length_half` 100 / 0.2, 250 / 0.3, 150 / 0.5 | 20 | je 300 | +63 / +62 / +58 |
+| `eat_want` 1 | 20 | 300 | +13 ➖ |
+| `area_ratio` 1 / 3 | 20 | je 300 | +35 / +60 |
+| `opp_area` 1.2 + `length` 10 | 20 | 300 | +92 |
+| auf Basis 150/0.3: + `opp_area` 1.2 + `length` 10 / + `area_ratio` 3 / + `opp_area` 1.2 | 20 | je 300 | +6 / +7 / +6 |
+| auf Basis 150/0.3: alle drei zusammen (D+) | 20 | 300 | +42 |
+| **150/0.3 (D)** | 40 | 300 | **+78** |
+| D+ | 40 | 300 | +102 |
+
+Gegnerpool (je 200, 10 ms): Basis 0,513, **D 0,622** (self 0,642, hungry 0,652, territory 0,585, cautious 0,550, long 0,682),
+D+ 0,590 (territory 0,472). Stellungstest (Top-5-Züge in gewonnenen Duellen, 50 ms, n = 5197): Übereinstimmung 63,4 % → 64,5 %,
+Fehlgriffe 3,0 % → **1,2 %**, ab Zug 250: 59,2 % → 61,4 %, Fehlgriffe 4,8 % → 1,6 %.
+
+✅ D ins Duell-Profil übernommen (wirkt auch im 4er-Endspiel mit einem Gegner). D+ verworfen: verliert gegen „territory“, kein
+Vorteil im Stellungstest erwartet. Arena-Metriken für die Bewertung: Siegquote gegen Rang 1–8, Niederlagen mit Längenvorsprung ≥ 5.
+
+### Runde 6 (2026-11-06): Tempo und Testumgebung
 
 **Regel:** Erst wieder pushen, wenn die aktuelle Version genug gespielt hat und in der Arena stagniert. Nur so lässt sich
 sehen, ob eine neue Änderung wirklich besser ist. Lokale Kandidaten warten bis dahin.
