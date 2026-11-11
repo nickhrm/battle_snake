@@ -66,6 +66,17 @@ pub struct Weights {
     pub area_ratio: f32,
     /// penalty per step of head distance from the board centre
     pub center: f32,
+    /// Scale of the territory terms on an open board. Territory only predicts the result once
+    /// the board is crowded (top duels: nothing below 38 total snake length, strongly from 52).
+    /// The scale rises linearly from `area_open` at `crowd_lo` total length of all living
+    /// snakes to 1 at `crowd_hi`. 1 switches it off.
+    pub area_open: f32,
+    pub crowd_lo: f32,
+    pub crowd_hi: f32,
+    /// Fade of the length terms by crowding instead of by turn number: full value up to
+    /// `fade_lo` total length, `length_min` from `fade_hi` (0 = off).
+    pub fade_lo: f32,
+    pub fade_hi: f32,
 }
 
 impl Default for Weights {
@@ -97,6 +108,11 @@ impl Default for Weights {
             eat_want: 0.0,
             area_ratio: 0.0,
             center: 0.0,
+            area_open: 1.0,
+            crowd_lo: 30.0,
+            crowd_hi: 55.0,
+            fade_lo: 0.0,
+            fade_hi: 0.0,
         }
     }
 }
@@ -426,8 +442,18 @@ fn voronoi_bb_w<const W: u32>(st: &State, hazard_value: f32, parity: f32) -> Vor
     out
 }
 
+/// Total length of all living snakes: how crowded the board is.
+#[inline]
+pub fn crowding(st: &State) -> f32 {
+    st.snakes.iter().filter(|s| s.alive).map(|s| s.len()).sum::<usize>() as f32
+}
+
 #[inline]
 pub fn length_factor(st: &State, w: &Weights) -> f32 {
+    if w.fade_hi > 0.0 {
+        let t = ((crowding(st) - w.fade_lo) / (w.fade_hi - w.fade_lo).max(1.0)).clamp(0.0, 1.0);
+        return 1.0 - t * (1.0 - w.length_min);
+    }
     if w.length_half > 0.0 {
         (0.5f32).powf(st.turn as f32 / w.length_half).max(w.length_min)
     } else {
@@ -474,6 +500,10 @@ pub fn evaluate(st: &State, w: &Weights) -> f32 {
 
     let my_area = vor.area[0];
     let mut score = w.area * my_area - w.opp_area * max_opp_area - w.opp_area_sum * sum_opp_area;
+    if w.area_open != 1.0 {
+        let t = ((crowding(st) - w.crowd_lo) / (w.crowd_hi - w.crowd_lo).max(1.0)).clamp(0.0, 1.0);
+        score *= w.area_open + t * (1.0 - w.area_open);
+    }
 
     // trapped: not enough room for our body
     let room = vor.cells[0] as i32;

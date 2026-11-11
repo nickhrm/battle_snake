@@ -1,7 +1,7 @@
 //! HTTP server for the Battlesnake webhook API.
 
 use axum::{
-    extract::State as AxState,
+    extract::{Path, State as AxState},
     http::StatusCode,
     routing::{get, post},
     Json, Router,
@@ -26,7 +26,13 @@ struct AppState {
     default_net_ms: f64,
     safety_ms: f64,
     max_budget_ms: f64,
+    /// answer this much sooner while a timeout would be costly (the engine repeats our last move)
+    early_ms: f64,
+    /// think this much longer while the timeout move is our choice anyway
+    late_ms: f64,
     parallel: bool,
+    /// experiment variants by name, served under /v/<name>/ (see `honey_badger::apply_variant`)
+    variants: HashMap<String, Value>,
 }
 
 fn env_f64(name: &str, default: f64) -> f64 {
@@ -38,6 +44,34 @@ fn env_f64(name: &str, default: f64) -> f64 {
 
 fn env_str(name: &str, default: &str) -> String {
     std::env::var(name).unwrap_or_else(|_| default.to_string())
+}
+
+async fn index_variant(AxState(app): AxState<Arc<AppState>>, Path(name): Path<String>) -> Result<Json<Value>, StatusCode> {
+    let v = app.variants.get(&name).ok_or(StatusCode::NOT_FOUND)?;
+    let Json(mut info) = index().await;
+    for key in ["color", "head", "tail"] {
+        if let Some(x) = v.get(key) {
+            info[key] = x.clone();
+        }
+    }
+    Ok(Json(info))
+}
+
+async fn start_variant(app: AxState<Arc<AppState>>, Path(_): Path<String>, gs: Json<GameState>) -> StatusCode {
+    start(app, gs).await
+}
+
+async fn end_variant(app: AxState<Arc<AppState>>, Path(_): Path<String>, gs: Json<GameState>) -> StatusCode {
+    end(app, gs).await
+}
+
+async fn mv_variant(AxState(app): AxState<Arc<AppState>>, Path(name): Path<String>, Json(gs): Json<GameState>) -> Result<Json<Value>, StatusCode> {
+    let v = app.variants.get(&name).cloned().ok_or(StatusCode::NOT_FOUND)?;
+    Ok(play(app, gs, Some((name, v))).await)
+}
+
+async fn mv(AxState(app): AxState<Arc<AppState>>, Json(gs): Json<GameState>) -> Json<Value> {
+    play(app, gs, None).await
 }
 
 async fn index() -> Json<Value> {
@@ -56,7 +90,7 @@ async fn start(AxState(app): AxState<Arc<AppState>>, Json(gs): Json<GameState>) 
     // forget stale games
     g.retain(|_, m| m.last_seen.elapsed() < Duration::from_secs(1800));
     g.insert(
-        gs.game.id.clone(),
+        mem_key(&gs),
         GameMem {
             net_ms: app.default_net_ms,
             last_compute_ms: 0,
@@ -77,7 +111,7 @@ async fn start(AxState(app): AxState<Arc<AppState>>, Json(gs): Json<GameState>) 
 }
 
 async fn end(AxState(app): AxState<Arc<AppState>>, Json(gs): Json<GameState>) -> StatusCode {
-    app.games.lock().unwrap().remove(&gs.game.id);
+    app.games.lock().unwrap().remove(&mem_key(&gs));
     let alive = gs.board.snakes.iter().any(|s| s.id == gs.you.id);
     let winner = gs
         .board
@@ -101,11 +135,17 @@ async fn end(AxState(app): AxState<Arc<AppState>>, Json(gs): Json<GameState>) ->
     StatusCode::OK
 }
 
+/// Two of our snakes (production and a variant) can meet in one game: keep their latency
+/// estimates apart.
+fn mem_key(gs: &GameState) -> String {
+    format!("{}:{}", gs.game.id, gs.you.id)
+}
+
 fn short(id: &str) -> &str {
     &id[..id.len().min(8)]
 }
 
-async fn mv(AxState(app): AxState<Arc<AppState>>, Json(gs): Json<GameState>) -> Json<Value> {
+async fn play(app: Arc<AppState>, gs: GameState, variant: Option<(String, Value)>) -> Json<Value> {
     let t0 = Instant::now();
     let timeout = if gs.game.timeout == 0 {
         500.0
@@ -116,7 +156,7 @@ async fn mv(AxState(app): AxState<Arc<AppState>>, Json(gs): Json<GameState>) -> 
     // update latency estimate from what the engine measured for the previous turn
     let net = {
         let mut g = app.games.lock().unwrap();
-        let m = g.entry(gs.game.id.clone()).or_insert(GameMem {
+        let m = g.entry(mem_key(&gs)).or_insert(GameMem {
             net_ms: app.default_net_ms,
             last_compute_ms: 0,
             last_seen: Instant::now(),
@@ -136,25 +176,37 @@ async fn mv(AxState(app): AxState<Arc<AppState>>, Json(gs): Json<GameState>) -> 
     let budget = (timeout - net - app.safety_ms).clamp(15.0, app.max_budget_ms.min(timeout * 0.9));
     let deadline = t0 + Duration::from_millis(budget as u64);
 
+    // room for the extension: stay 40 ms below the timeout after the network overhead
+    let late = app.late_ms.min(timeout - net - 40.0 - budget).max(0.0);
+    let early = app.early_ms.min(budget * 0.5).max(0.0);
     let parallel = app.parallel;
     let turn = gs.turn;
+    let tag = variant.as_ref().map(|(n, _)| format!(" v={n}")).unwrap_or_default();
+    let variant_cfg = variant;
     let gid = gs.game.id.clone();
+    let key = mem_key(&gs);
     let result = tokio::task::spawn_blocking(move || {
         let st = gs.to_state();
-        let cfg = config_for(&st, parallel);
+        let mut cfg = config_for(&st, parallel);
+        if let Some((_, v)) = &variant_cfg {
+            honey_badger::apply_variant(&mut cfg, &st, v);
+        }
+        cfg.fallback = Some(gs.you.last_move());
+        cfg.early = Duration::from_millis(early as u64);
+        cfg.late = Duration::from_millis(late as u64);
         search::search(&st, &cfg, deadline)
     })
     .await;
 
     let elapsed = t0.elapsed().as_millis() as u64;
-    if let Some(m) = app.games.lock().unwrap().get_mut(&gid) {
+    if let Some(m) = app.games.lock().unwrap().get_mut(&key) {
         m.last_compute_ms = elapsed;
     }
 
     match result {
         Ok(r) => {
             println!(
-                "MOVE game={} turn={} move={} depth={} score={:.1} nodes={} ms={} budget={:.0} net={:.0}",
+                "MOVE game={} turn={} move={} depth={} score={:.1} nodes={} ms={} budget={:.0} net={:.0}{tag}",
                 short(&gid),
                 turn,
                 r.best.name(),
@@ -209,16 +261,30 @@ async fn main() {
         default_net_ms: env_f64("NET_ESTIMATE_MS", 150.0),
         safety_ms: env_f64("SAFETY_MS", 60.0),
         max_budget_ms: env_f64("MAX_BUDGET_MS", 360.0),
+        early_ms: env_f64("EARLY_MS", 100.0),
+        late_ms: env_f64("LATE_MS", 60.0),
         parallel: std::env::var("PARALLEL")
             .map(|v| v != "0")
             .unwrap_or(cores > 1),
+        variants: std::env::var("SNAKE_VARIANTS")
+            .ok()
+            .map(|js| serde_json::from_str(&js).expect("SNAKE_VARIANTS must be a JSON object of variants"))
+            .unwrap_or_default(),
     });
+    for name in app.variants.keys() {
+        println!("variant /v/{name}/");
+    }
 
     let router = Router::new()
         .route("/", get(index))
         .route("/start", post(start))
         .route("/move", post(mv))
         .route("/end", post(end))
+        .route("/v/:name", get(index_variant))
+        .route("/v/:name/", get(index_variant))
+        .route("/v/:name/start", post(start_variant))
+        .route("/v/:name/move", post(mv_variant))
+        .route("/v/:name/end", post(end_variant))
         .with_state(app);
 
     let addr = format!("0.0.0.0:{port}");

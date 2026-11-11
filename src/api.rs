@@ -92,6 +92,25 @@ pub struct GameState {
 }
 
 impl ApiSnake {
+    /// The direction of our last move, which the engine repeats when our answer is late
+    /// ("up" before the first move).
+    pub fn last_move(&self) -> crate::game::Dir {
+        use crate::game::Dir;
+        match (self.body.first(), self.body.get(1)) {
+            (Some(h), Some(n)) => match (h.x - n.x, h.y - n.y) {
+                (0, -1) => Dir::Down,
+                (-1, 0) => Dir::Left,
+                (1, 0) => Dir::Right,
+                // wrapped boards: a step over the edge shows up as a jump
+                (dx, 0) if dx > 1 => Dir::Left,
+                (dx, 0) if dx < -1 => Dir::Right,
+                (0, dy) if dy > 1 => Dir::Down,
+                _ => Dir::Up,
+            },
+            _ => Dir::Up,
+        }
+    }
+
     /// latency (ms) the engine measured for our previous response
     pub fn latency_ms(&self) -> Option<u64> {
         match &self.latency {

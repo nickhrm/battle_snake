@@ -38,6 +38,21 @@ pub struct SearchConfig {
     /// heuristic move for opponents outside the search: space, head danger and food
     /// instead of free neighbours only
     pub smart_default: bool,
+    /// Multi-player: instead of one search against the coalition of all opponents, run one
+    /// search per opponent in which only that opponent (and any opponent next to our head)
+    /// chooses freely while the others play their heuristic move, and take the worst case
+    /// over these searches. Opponents do not coordinate in real games.
+    pub focus: bool,
+    /// focus search: opponents whose head is within this distance of ours always choose freely
+    pub focus_reach: i32,
+    /// The move the engine plays for us when our answer is late (it repeats our last move).
+    /// With it the search answers `early` sooner while a timeout would be costly, and takes
+    /// up to `late` longer while the timeout move is its own choice anyway.
+    pub fallback: Option<Dir>,
+    pub early: Duration,
+    pub late: Duration,
+    /// a timeout counts as costly when the fallback move scores this much below the best move
+    pub risk_margin: f32,
 }
 
 impl Default for SearchConfig {
@@ -54,6 +69,12 @@ impl Default for SearchConfig {
             deep_min_opps: 2,
             veto_frac: 0.0,
             smart_default: false,
+            focus: false,
+            focus_reach: 2,
+            fallback: None,
+            early: Duration::ZERO,
+            late: Duration::ZERO,
+            risk_margin: 25.0,
         }
     }
 }
@@ -87,6 +108,9 @@ struct Ctx<'a> {
     deep_reach: i32,
     deep_min_opps: usize,
     smart_default: bool,
+    /// focus search: index of the opponent that chooses freely at every ply
+    focus: Option<usize>,
+    focus_reach: i32,
     killer_me: [u8; MAX_PLY],
     killer_opp: [u32; MAX_PLY],
     /// best exact root score found so far by any thread (f32 bits), parallel root only
@@ -120,6 +144,8 @@ impl<'a> Ctx<'a> {
             deep_reach: 2,
             deep_min_opps: 2,
             smart_default: false,
+            focus: None,
+            focus_reach: 2,
             killer_me: [255; MAX_PLY],
             killer_opp: [u32::MAX; MAX_PLY],
             shared_alpha: None,
@@ -267,7 +293,12 @@ impl<'a> Ctx<'a> {
             idxs[no] = j;
             // A proven win must not rest on a guessed move, so the last opponent is always
             // searched in full. It costs little: there is only one snake to enumerate.
-            if (d <= reach || self.start_opps == 1) && rank < self.max_relevant {
+            let full = match self.focus {
+                // the first ply stays fully paranoid: any opponent may take a head-to-head now
+                Some(f) if ply > 0 => j == f || d <= self.focus_reach,
+                _ => (d <= reach || self.start_opps == 1) && rank < self.max_relevant,
+            };
+            if full {
                 let c = st.safe_moves(j, &mut opt[no]);
                 if c == 0 {
                     opt[no][0] = st.fallback_move(j);
@@ -615,7 +646,179 @@ pub fn search(st: &State, cfg: &SearchConfig, deadline: Instant) -> SearchResult
     r2
 }
 
+/// Deadline of the next iteration under the timeout rule (see `SearchConfig::fallback`).
+/// `fallback_idx`: None = no rule, Some(None) = the fallback move is not even a safe move.
+fn timeout_deadline(
+    cfg: &SearchConfig,
+    deadline: Instant,
+    fallback_idx: Option<Option<usize>>,
+    best_idx: usize,
+    best_score: f32,
+    prev: &[f32],
+) -> Instant {
+    let Some(fi) = fallback_idx else { return deadline };
+    let costly = match fi {
+        None => true,
+        Some(fi) => is_loss(prev[fi]) || best_score - prev[fi] > cfg.risk_margin,
+    };
+    if fi == Some(best_idx) {
+        deadline + cfg.late
+    } else if costly && !is_loss(best_score) {
+        deadline.checked_sub(cfg.early).unwrap_or(deadline)
+    } else {
+        deadline
+    }
+}
+
+/// One search per opponent, worst case per root move (see `SearchConfig::focus`).
+///
+/// The value of a root move is the minimum over its searches. A move is dropped for the current
+/// iteration as soon as one search puts it below the best value another move has completed
+/// (its value is then an upper bound), and a search stops once it cannot lower the minimum.
+fn search_focus(st: &State, cfg: &SearchConfig, deadline: Instant, root: &[Dir]) -> SearchResult {
+    let n = root.len();
+    let start_opps = st.alive_opponents();
+    let opps: Vec<usize> = (1..st.snakes.len().min(16)).filter(|&j| st.snakes[j].alive).collect();
+    let k = opps.len();
+    let stop = AtomicBool::new(false);
+    let shared = AtomicU32::new((-INF).to_bits());
+    let w = &cfg.weights;
+    let far = Instant::now() + Duration::from_secs(3600);
+    // one context per (root move, focus opponent), killers survive the iterations
+    let mut ctxs: Vec<Ctx> = (0..n * k)
+        .map(|t| {
+            let mut c = Ctx::new(w, far, &stop, start_opps, cfg.max_relevant, cfg.max_reach);
+            c.smart_default = cfg.smart_default;
+            c.focus = Some(opps[t % k]);
+            c.focus_reach = cfg.focus_reach;
+            if cfg.parallel {
+                c.shared_alpha = Some(&shared);
+            }
+            c
+        })
+        .collect();
+    let mut order: Vec<usize> = (0..n).collect();
+    let mut prev: Vec<f32> = vec![0.0; n];
+    let mut best_idx = 0usize;
+    let mut best_score = -INF;
+    let mut done_depth = 0;
+    let fallback_idx = cfg.fallback.map(|f| root.iter().position(|&m| m == f));
+    for depth in 1..=cfg.max_depth {
+        let mut dl = far;
+        if depth > 1 {
+            dl = timeout_deadline(cfg, deadline, fallback_idx, best_idx, best_score, &prev);
+            if Instant::now() >= dl {
+                break;
+            }
+        }
+        for c in ctxs.iter_mut() {
+            c.deadline = dl;
+            c.aborted = false;
+        }
+        shared.store((-INF).to_bits(), Ordering::Relaxed);
+        // all searches of root move `i` against a lower bound `alpha`: (value, exact)
+        let run = |i: usize, chunk: &mut [Ctx], st: &State, alpha: f32| -> Option<(f32, bool)> {
+            let mut cur = INF;
+            for c in chunk.iter_mut() {
+                let a = match c.shared_alpha {
+                    Some(sa) => f32::from_bits(sa.load(Ordering::Relaxed)),
+                    None => alpha,
+                };
+                c.alpha_seen = a;
+                let v = c.min_node(st, root[i], depth, 0, a, cur, 0.0);
+                if c.aborted {
+                    return None;
+                }
+                cur = cur.min(v);
+                if cur <= c.alpha_seen {
+                    return Some((cur, false)); // refuted: another move is at least as good
+                }
+            }
+            Some((cur, true))
+        };
+        let mut res: Vec<Option<(f32, bool)>> = vec![None; n];
+        if cfg.parallel {
+            let (run, shared) = (&run, &shared);
+            let out: Vec<Option<(f32, bool)>> = std::thread::scope(|scope| {
+                let handles: Vec<_> = ctxs
+                    .chunks_mut(k)
+                    .enumerate()
+                    .map(|(i, chunk)| {
+                        scope.spawn(move || {
+                            let local = State {
+                                rules: std::sync::Arc::new((*st.rules).clone()),
+                                ..st.clone()
+                            };
+                            let r = run(i, chunk, &local, -INF);
+                            if let Some((v, true)) = r {
+                                let mut cur = shared.load(Ordering::Relaxed);
+                                while v > f32::from_bits(cur) {
+                                    match shared.compare_exchange_weak(cur, v.to_bits(), Ordering::Relaxed, Ordering::Relaxed) {
+                                        Ok(_) => break,
+                                        Err(x) => cur = x,
+                                    }
+                                }
+                            }
+                            r
+                        })
+                    })
+                    .collect();
+                handles.into_iter().map(|h| h.join().unwrap()).collect()
+            });
+            res = out;
+        } else {
+            let mut alpha = -INF;
+            for &i in &order {
+                let r = run(i, &mut ctxs[i * k..(i + 1) * k], st, alpha);
+                res[i] = r;
+                match r {
+                    None => break,
+                    // exact_root (analysis): every move keeps a full window
+                    Some((v, true)) if v > alpha && !cfg.exact_root => alpha = v,
+                    _ => {}
+                }
+            }
+        }
+        if res.iter().any(|r| r.is_none()) {
+            break;
+        }
+        let scores: Vec<f32> = res.iter().map(|r| r.unwrap().0).collect();
+        if depth > 1 && scores.iter().all(|&v| is_loss(v)) && !is_loss(best_score) {
+            break;
+        }
+        // highest value, exact values win ties, then the order of the previous iteration
+        let better = |a: (f32, bool), b: (f32, bool)| a.0 > b.0 || (a.0 == b.0 && a.1 && !b.1);
+        let mut bi = order[0];
+        for &i in &order {
+            if better(res[i].unwrap(), res[bi].unwrap()) {
+                bi = i;
+            }
+        }
+        best_idx = bi;
+        best_score = scores[bi];
+        prev = scores;
+        done_depth = depth;
+        order.sort_by(|&a, &b| prev[b].partial_cmp(&prev[a]).unwrap_or(std::cmp::Ordering::Equal));
+        if let Some(p) = order.iter().position(|&i| i == best_idx) {
+            order[..=p].rotate_right(1);
+        }
+        if is_win(best_score) || is_loss(best_score) || Instant::now() >= dl {
+            break;
+        }
+    }
+    SearchResult {
+        best: root[best_idx],
+        score: best_score,
+        depth: done_depth,
+        nodes: ctxs.iter().map(|c| c.nodes).sum(),
+        scores: (0..n).map(|i| (root[i], prev[i])).collect(),
+    }
+}
+
 fn search_root(st: &State, cfg: &SearchConfig, deadline: Instant, root: &[Dir]) -> SearchResult {
+    if cfg.focus && st.alive_opponents() >= 2 {
+        return search_focus(st, cfg, deadline, root);
+    }
     let n = root.len();
     let start_opps = st.alive_opponents();
     let stop = AtomicBool::new(false);
@@ -645,7 +848,18 @@ fn search_root(st: &State, cfg: &SearchConfig, deadline: Instant, root: &[Dir]) 
     let mut best_score = -INF;
     let mut done_depth = 0;
 
+    let fallback_idx = cfg.fallback.map(|f| root.iter().position(|&m| m == f));
     for depth in 1..=cfg.max_depth {
+        // Timeout risk: a late answer makes the engine repeat our last move. If that move is
+        // our choice anyway, a timeout costs nothing and we may think longer. If it is much
+        // worse than our choice (or deadly), answer early so a latency spike cannot kill us.
+        let mut deadline = deadline;
+        if depth > 1 {
+            deadline = timeout_deadline(cfg, deadline, fallback_idx, best_idx, best_score, &prev);
+            if fallback_idx.is_some() && Instant::now() >= deadline {
+                break;
+            }
+        }
         let dl = if depth == 1 { far } else { deadline };
         for c in ctxs.iter_mut() {
             c.deadline = dl;
@@ -869,6 +1083,59 @@ mod tests {
         let r = best(&st, 100);
         assert!(!is_win(r.score), "{:?}", r);
         assert!(r.depth > 5, "{:?}", r);
+    }
+
+    #[test]
+    fn focus_search_keeps_head_to_head_safety() {
+        // a longer snake two cells above us could meet us at (5,6); a third snake is far away
+        let st = mk(
+            vec![
+                vec![(5, 5), (5, 4), (5, 3)],
+                vec![(5, 7), (5, 8), (6, 8), (7, 8), (8, 8)],
+                vec![(1, 1), (1, 2), (1, 3), (1, 4)],
+            ],
+            vec![],
+        );
+        for parallel in [false, true] {
+            let cfg = SearchConfig {
+                parallel,
+                focus: true,
+                ..Default::default()
+            };
+            let r = search(&st, &cfg, Instant::now() + Duration::from_millis(60));
+            assert_ne!(r.best, Dir::Up, "{:?}", r);
+            assert!(r.depth >= 2, "{:?}", r);
+        }
+    }
+
+    #[test]
+    fn answers_early_when_a_timeout_would_kill() {
+        // heading up into the top wall: the engine would repeat "up" on a timeout
+        let st = mk(
+            vec![
+                vec![(5, 10), (5, 9), (5, 8)],
+                vec![(1, 1), (1, 2), (1, 3)],
+            ],
+            vec![],
+        );
+        let run = |fallback: Dir| {
+            let cfg = SearchConfig {
+                parallel: false,
+                fallback: Some(fallback),
+                early: Duration::from_millis(60),
+                late: Duration::from_millis(40),
+                ..Default::default()
+            };
+            let t = Instant::now();
+            let r = search(&st, &cfg, t + Duration::from_millis(120));
+            (r.best, t.elapsed().as_millis())
+        };
+        let (best, ms) = run(Dir::Up);
+        assert_ne!(best, Dir::Up);
+        assert!((55..90).contains(&ms), "{ms}");
+        // the timeout move is our own choice: use the extension
+        let (_, ms) = run(best);
+        assert!((150..190).contains(&ms), "{ms}");
     }
 
     #[test]

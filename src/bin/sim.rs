@@ -2,6 +2,11 @@
 //! official rules (food spawning, royale shrinking, constrictor growth).
 //!
 //! cargo run --release --bin sim -- --mode duel --games 200 --ms 20 --a '{"length":8}' --b '{}'
+//!
+//! `--a/--b/--x <weights json>` fix the weights for the whole game (overrides on the profile of
+//! the mode). `--av/--bv/--xv <variant json>` use the production config of every position plus
+//! the variant, like the server: prefer these, with `--bv '{}'` as the production baseline.
+//! SIM_BEHAVIOUR=1 also prints how each side behaves (centre distance, wall share, length).
 
 use honey_badger::eval::Weights;
 use honey_badger::game::{Dir, Rules, Snake, State, NONE};
@@ -30,6 +35,10 @@ struct Player {
     greedy: bool,
     /// external snake server (e.g. "127.0.0.1:5001"), queried like the real engine does
     http: Option<String>,
+    /// variant object (see `honey_badger::apply_variant`). With it the player uses the
+    /// production config of every position plus the variant, exactly like the server does
+    /// (including the switch to the duel profile once one opponent is left).
+    variant: Option<serde_json::Value>,
 }
 
 fn mode_names(mode: Mode) -> (&'static str, &'static str) {
@@ -254,8 +263,11 @@ fn parse_args() -> Args {
         ms: 20,
         greedy: false,
         http: None,
+        variant: None,
     };
     let mut b = a.clone();
+    let mut x_variant: Option<serde_json::Value> = None;
+    let json = |s: String| -> serde_json::Value { serde_json::from_str(&s).unwrap_or_else(|e| panic!("bad variant json {s}: {e}")) };
     let mut verbose = false;
     let mut timeout = 500;
     let mut dump: Option<String> = None;
@@ -299,6 +311,12 @@ fn parse_args() -> Args {
             "--arel" => a.cfg.max_relevant = v().parse().unwrap(),
             "--brel" => b.cfg.max_relevant = v().parse().unwrap(),
             "--areach" => a.cfg.max_reach = v().parse().unwrap(),
+            "--av" => a.variant = Some(json(v())),
+            "--bv" => b.variant = Some(json(v())),
+            "--xv" => x_variant = Some(json(v())),
+            "--afocus" => a.cfg.focus = true,
+            "--bfocus" => b.cfg.focus = true,
+            "--afocusreach" => a.cfg.focus_reach = v().parse().unwrap(),
             "--asmart" => a.cfg.smart_default = true,
             "--bsmart" => b.cfg.smart_default = true,
             "--adeep" => a.cfg.deep_ply = v().parse().unwrap(),
@@ -320,8 +338,17 @@ fn parse_args() -> Args {
         p.cfg.max_reach = x_reach;
         p.cfg.smart_default = std::env::var("XSMART").is_ok();
         p.greedy = x_greedy;
+        p.variant = None;
         p
     });
+    let x = match (x, x_variant) {
+        (None, Some(v)) => {
+            let mut p = b.clone();
+            p.variant = Some(v);
+            Some(p)
+        }
+        (x, _) => x,
+    };
     Args {
         x,
         mode,
@@ -487,6 +514,46 @@ fn view(st: &State, i: usize) -> (State, Vec<usize>) {
     )
 }
 
+/// How a snake behaves, independent of the result: comparable with the arena statistics of the
+/// top snakes (centre distance and wall share in the first 30 turns, length at turn 60 and 100).
+#[derive(Clone, Copy, Default)]
+struct Behaviour {
+    open_turns: f64,
+    centre: f64,
+    edge: f64,
+    len60: f64,
+    n60: f64,
+    len100: f64,
+    n100: f64,
+    games: f64,
+    first_out: f64,
+}
+
+impl Behaviour {
+    fn add(&mut self, o: &Behaviour) {
+        self.open_turns += o.open_turns;
+        self.centre += o.centre;
+        self.edge += o.edge;
+        self.len60 += o.len60;
+        self.n60 += o.n60;
+        self.len100 += o.len100;
+        self.n100 += o.n100;
+        self.games += o.games;
+        self.first_out += o.first_out;
+    }
+
+    fn line(&self, name: &str) -> String {
+        format!(
+            "{name}: centre<30 {:.2} edge<30 {:.1}% len60 {:.1} len100 {:.1} first out {:.1}%",
+            self.centre / self.open_turns.max(1.0),
+            100.0 * self.edge / self.open_turns.max(1.0),
+            self.len60 / self.n60.max(1.0),
+            self.len100 / self.n100.max(1.0),
+            100.0 * self.first_out / self.games.max(1.0)
+        )
+    }
+}
+
 /// returns index of the winner (None = draw), number of turns
 fn play(
     players: &[Player],
@@ -497,6 +564,7 @@ fn play(
     timeouts: &AtomicUsize,
     hist: &mut VecDeque<State>,
     died: &mut Vec<u32>,
+    beh: &mut [Behaviour],
 ) -> (Option<usize>, u32) {
     let mut w = World::new(mode, players.len(), seed);
     let game_id = format!("sim-{seed}-{}", rand::random::<u32>());
@@ -541,7 +609,14 @@ fn play(
                 moves[i] = m;
                 continue;
             }
-            let r = search(&v, &players[i].cfg, dl);
+            let r = match &players[i].variant {
+                Some(var) => {
+                    let mut cfg = honey_badger::config_for(&v, false);
+                    honey_badger::apply_variant(&mut cfg, &v, var);
+                    search(&v, &cfg, dl)
+                }
+                None => search(&v, &players[i].cfg, dl),
+            };
             moves[i] = r.best;
             if verbose && i == 0 {
                 eprintln!(
@@ -551,6 +626,26 @@ fn play(
             }
         }
         w.st.advance(&moves);
+        for (i, b) in beh.iter_mut().enumerate() {
+            let sn = &w.st.snakes[i];
+            if !sn.alive {
+                continue;
+            }
+            let (x, y) = w.st.rules.xy(sn.head());
+            if w.st.turn < 30 {
+                b.open_turns += 1.0;
+                b.centre += ((x - 5).abs() + (y - 5).abs()) as f64;
+                b.edge += (x == 0 || y == 0 || x == 10 || y == 10) as u8 as f64;
+            }
+            if w.st.turn == 60 {
+                b.len60 += sn.len() as f64;
+                b.n60 += 1.0;
+            }
+            if w.st.turn == 100 {
+                b.len100 += sn.len() as f64;
+                b.n100 += 1.0;
+            }
+        }
         w.shrink();
         w.spawn_food();
         let _ = NONE;
@@ -567,6 +662,7 @@ fn main() {
     let timeouts = AtomicUsize::new(0);
     // results: wins A, wins B, draws, total turns
     let res = Mutex::new((0usize, 0usize, 0usize, 0u64));
+    let behaviour = Mutex::new([Behaviour::default(); 3]);
     let t0 = Instant::now();
     std::thread::scope(|s| {
         for _ in 0..args.threads {
@@ -608,7 +704,19 @@ fn main() {
                 let seed = args.seed.wrapping_mul(1_000_003).wrapping_add(g as u64 / 2);
                 let mut hist = VecDeque::new();
                 let mut died = Vec::new();
-                let (winner, turns) = play(&players, args.mode, seed, args.verbose, args.timeout, &timeouts, &mut hist, &mut died);
+                let mut beh = vec![Behaviour::default(); n];
+                let (winner, turns) = play(&players, args.mode, seed, args.verbose, args.timeout, &timeouts, &mut hist, &mut died, &mut beh);
+                {
+                    let first = died.iter().copied().min().unwrap_or(u32::MAX);
+                    let mut all = behaviour.lock().unwrap();
+                    for i in 0..n {
+                        beh[i].games = 1.0;
+                        // out first, and not together with everybody else
+                        beh[i].first_out = (died[i] == first && died.iter().any(|&d| d > first)) as u8 as f64;
+                        let slot = if is_a[i] { 0 } else if is_b[i] { 1 } else { 2 };
+                        all[slot].add(&beh[i]);
+                    }
+                }
                 if let Some(dir) = &args.dump {
                     // dump the last positions of every A snake that died
                     let a_won = matches!(winner, Some(wi) if is_a[wi]);
@@ -656,8 +764,14 @@ fn main() {
     } else {
         f64::NAN
     };
+    // 95 % interval of the Elo estimate from the per-game variance (games count as independent)
+    let nf = total as f64;
+    let var = (a as f64 * (1.0 - score).powi(2) + b as f64 * score.powi(2) + d as f64 * (0.5 - score).powi(2)) / nf;
+    let se = (var / nf).sqrt();
+    let to_elo = |s: f64| -400.0 * (1.0 / s.clamp(0.001, 0.999) - 1.0).log10();
+    let (lo, hi) = (to_elo(score - 1.96 * se), to_elo(score + 1.96 * se));
     println!(
-        "mode={:?} games={} A={} B={} draws={} scoreA={:.3} elo={:+.0} avg_turns={:.0} time={:.1}s",
+        "mode={:?} games={} A={} B={} draws={} scoreA={:.3} elo={:+.0} [{:+.0},{:+.0}] avg_turns={:.0} time={:.1}s",
         args.mode,
         total,
         a,
@@ -665,9 +779,19 @@ fn main() {
         d,
         score,
         elo,
+        lo,
+        hi,
         turns as f64 / total as f64,
         t0.elapsed().as_secs_f64()
     );
+    if std::env::var("SIM_BEHAVIOUR").is_ok() {
+        let all = behaviour.lock().unwrap();
+        for (slot, name) in ["A", "B", "X"].iter().enumerate() {
+            if all[slot].games > 0.0 {
+                println!("  {}", all[slot].line(name));
+            }
+        }
+    }
     let to = timeouts.load(Ordering::Relaxed);
     if to > 0 {
         println!("external snake timeouts/errors: {to}");

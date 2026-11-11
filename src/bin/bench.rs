@@ -12,7 +12,15 @@ fn main() {
     let parallel = args.get(3).map(|s| s != "seq").unwrap_or(true);
     let gs: GameState = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     let st = gs.to_state();
-    let cfg = config_for(&st, parallel);
+    let mut cfg = config_for(&st, parallel);
+    honey_badger::apply_env(&mut cfg, &st);
+    // BENCH_TIMEOUT=early_ms,late_ms: timeout-aware deadline as on the server
+    if let Ok(v) = std::env::var("BENCH_TIMEOUT") {
+        let (e, l) = v.split_once(',').expect("early,late");
+        cfg.fallback = Some(gs.you.last_move());
+        cfg.early = Duration::from_millis(e.parse().unwrap());
+        cfg.late = Duration::from_millis(l.parse().unwrap());
+    }
     if args.get(3).map(|s| s == "micro").unwrap_or(false) {
         micro(&st);
         return;
@@ -22,8 +30,9 @@ fn main() {
         let r = search(&st, &cfg, t + Duration::from_millis(ms));
         let el = t.elapsed().as_secs_f64();
         println!(
-            "best={} depth={} score={:.1} nodes={} knps={:.0} scores={:?}",
+            "best={} ms={:.0} depth={} score={:.1} nodes={} knps={:.0} scores={:?}",
             r.best.name(),
+            el * 1000.0,
             r.depth,
             r.score,
             r.nodes,
