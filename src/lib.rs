@@ -67,9 +67,17 @@ pub fn profile(st: &State) -> Weights {
 pub fn config_for(st: &State, parallel: bool) -> SearchConfig {
     // The ply limit with veto (deep_ply 2, deep_min_opps 3, veto_frac 0.35) moved our standard
     // openings off the walls, but showed no gain in self-play (EXPERIMENTS.md, round 7): off.
+    //
+    // Standard with two or more opponents alive: focus search (one search per opponent instead
+    // of a coalition of all) with the heuristic move for the opponents that do not choose
+    // freely. Position test 62.4 % -> 64.7 % (z +3.5), self-play about +50 Elo over seven runs
+    // (EXPERIMENTS.md, round 8). Not measured in royale and constrictor: off there.
+    let standard = mode_of(st) == "standard";
     SearchConfig {
         weights: weights_for(st),
         parallel,
+        focus: standard,
+        smart_default: standard,
         ..SearchConfig::default()
     }
 }

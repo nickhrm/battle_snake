@@ -25,6 +25,9 @@ Vorhersage. Commits im Abstand von wenigen Stunden lassen sich in der Arena nich
 | 11-06 10:20 | Messung, kein Deploy | 57,7 (#10, 374) | 40,4 (#10, 364) | 33,6 (#14, 102) | 20,9 (101) | global 152,9 (#10), Spitze Snakes Alive 184,7 |
 | 11-09 08:50 | Basis vor Duell-Abklingen | 55,8 (#14, 670) | 41,9 (#8, 656) | 35,2 (396) | 21,2 (411) | seit `0357c78`: Duell 145–149 (49 %), Standard 27 % Siege; Podium Duell 48,7, Standard 61,3 |
 | 11-09 10:15 | `7536b4c` deployt | – | – | – | – | Duell: Längen-Abklingen (Halbwertszeit 150, min. 30 %) |
+| 11-11 15:40 | Messung, kein Deploy | 55,8 (#15, 906) | 42,4 (#8, 893) | – | – | seit `7536b4c`: Duell 108–120 (47 %), Top 5 10–57, Standard 30 % Siege, 32 % Letzter; Spitze Duell 52,3, Standard 64,5 |
+| 11-11 19:00 | Basis vor Fokus-Suche | 56,1 (#14, 919) | 42,8 (#8, 908) | – | – | Standard seit `7536b4c`: 32 % Letzter, Rand 38 %, Länge bei Zug 100: 8,6; Tode im Timeout-Zug 11-08 bis 11-11: 33 in 1568 Partien |
+| 11-11 19:10 | Runde 8 deployt (Push, Build einige Minuten später) | – | – | – | – | Timeout-Regel (alle Modi), Standard: Fokus-Suche + `smart`. Auswerten mit `report --since '2026-11-11 19:30'` |
 
 Die globale Rangliste summiert die beste Wertung pro Leaderboard (fehlendes Board = 0).
 
@@ -33,31 +36,20 @@ Arena-Profil: <https://arena.battlesnake.com/battlesnakes/837dbb1c-2781-4e13-8b3
 
 ## Arbeitsablauf
 
-1. **Spiele laden.** Die Arena hat eine Engine-API:
-   - `https://arena.battlesnake.com/api/games/{id}` liefert Metadaten und den letzten Frame.
-   - `https://arena.battlesnake.com/api/games/{id}/frames?offset=0&limit=100` liefert die Frames
-     seitenweise. Pro Schlange gibt es `Body`, `Health`, `Latency`, `Death` (`Cause`, `Turn`,
-     `EliminatedBy`) und `Error`. Ein Timeout steht als `Latency` 500 mit Error
-     „A response was not received…“ drin.
-   - Die Spiel-IDs stehen als `/games/<uuid>`-Links im HTML der Profilseite.
-2. **Auswerten.** Todesursache und Zug, Timeouts, Latenz-Histogramm, eigene Länge im Vergleich
-   zum längsten Gegner bei Zug 25/50/100/150, getrennt nach Sieg und Niederlage.
-3. **Stellung nachrechnen.** Frame in Engine-JSON umwandeln (Format wie `tests/fixtures/*.json`),
-   dann `target/release/bench <datei> 300` aufrufen. Das zeigt Tiefe, Score pro Zug und Knoten/s.
-4. **Varianten testen.** Mit `tools/tune.sh <mode> <games> 10 '<basis>' '<variante>'…`
-   (Self-Play, 10 ms pro Zug).
-   - **Rauschen:** Bei 200 Spielen liegt es bei etwa ±50 Elo, bei 400 Spielen bei etwa ±35 Elo.
-     Alles darunter ist nicht signifikant. Gewinner mit mehr Spielen bestätigen.
-   - Ein 4er-Spiel dauert etwa 1,1 s (200 Spiele ≈ 4 min), ein Duell etwa 0,55 s.
-   - Mehrere Sims gleichzeitig verfälschen die Zeiten. **Nicht neu bauen, während eine Sim läuft**,
-     denn `tune.sh` startet das Binary pro Variante neu.
-   - Die Sim nutzt die **sequentielle** Suche. Änderungen an der Parallelsuche lassen sich nur
-     mit `bench` (Tiefe, Knoten/s) beurteilen.
-   - Self-Play misst nur gegen uns selbst. Ob es gegen die echten Gegner hilft, zeigt erst die
-     Arena.
-   - `--a`/`--b` überschreiben jetzt das Produktiv-Profil des Modus (`profile()` in `src/lib.rs`).
-   - Sims mit kopiertem Binary starten, dann darf nebenher gebaut werden (mit eigenem
-     `CARGO_TARGET_DIR`). Bei Fehlern, die erst tief wirken, auch mit 40 ms testen.
+Der Kreislauf (Daten holen, Unterschied zur Spitze messen, Variante bauen, Testleiter, Arena) steht mit allen Befehlen
+in [CLAUDE.md](CLAUDE.md). Hier nur die Zahlen, die man dafür braucht:
+
+- **Daten:** `python3 -I tools/arena.py sync` legt alles in `data/` ab (eigene Partien und die der Top 8). Die Arena
+  liefert etwa 40 Partien pro Minute. `tools/arena.py report --since '<UTC>'` ist die Bilanz seit einem Deploy.
+- **Rauschen im Self-Play:** 200 Spiele ±50 Elo, 400 ±35, 1000 ±22. Die Sim druckt das 95-%-Intervall.
+- **Dauer:** Ein Duell bei 40 ms etwa 2 s pro Kern, eine 4er-Partie bei 40 ms etwa 40–50 s pro Kern (200 Partien
+  ≈ 8 min auf 16 Threads).
+- **Nicht zwei Sims gleichzeitig**, und vor langen Läufen das Binary kopieren (dann darf nebenher gebaut werden).
+- Die Sim rechnet sequentiell. Änderungen an der Parallelsuche zeigt nur `bench` (Tiefe, Knoten/s).
+- Mit `--av/--bv/--xv` nutzt die Sim pro Stellung das Produktiv-Profil plus Variante, wie der Server (auch den Wechsel
+  ins Duell-Profil im 4er-Endspiel). `--a/--b` setzen feste Gewichte für die ganze Partie (älterer Weg).
+- **Stellungstest:** `agree` + `tools/agree_cmp.py` (gepaart). Der Lauf über 538 Standard-Partien mit 50 ms dauert
+  1,5 min. Zwei Läufe derselben Variante unterscheiden sich um etwa ±0,3 Punkte (zeitgesteuerte Suche).
 
 ## Beobachtungen aus Arena-Spielen
 
@@ -105,6 +97,171 @@ Arena-Profil: <https://arena.battlesnake.com/battlesnakes/837dbb1c-2781-4e13-8b3
 
 Elo-Werte sind aus Self-Play, Variante (A) gegen die Basis (B). ✅ übernommen, ❌ verworfen,
 ➖ neutral bzw. nicht übernommen.
+
+### Runde 8 (2026-11-11): Datenbasis, Timeouts, Fokus-Suche für Standard, Gebiet nach Brettfüllung
+
+Datenbasis: 1945 Partien in `data/` (1547 eigene seit 11-06, dazu die letzten 60 Partien der Top 8 in Duell und
+Standard). Neue Werkzeuge siehe CLAUDE.md. Deployt am 11-11 um 19:10 UTC: Timeout-Regel und Fokus-Suche + `smart` für Standard.
+
+**Arena seit `7536b4c` (11-09 10:20 bis 11-11 15:35, 228 Duelle, 226 Standard-Partien):**
+
+- Duell 108–120 (47,4 %, vorher 49 %). Gegen die Top 5 **10–57** (15 %, vorher 27–72 = 27 %, z ≈ −1,9): Odiodin 0–13,
+  Bwukinator 1–5, rattler 2–12, NMC² 4–14, AlphaSlinky 3–13. Gegen den Rest 98–63 (61 %, wie vorher).
+  Niederlagen mit Längenvorsprung ≥ 5: 21 von 120 (vorher 32 von 149). Wertung 41,9 → 42,4.
+  **Urteil: Das Längen-Abklingen hat in der Arena nichts gebracht**, gegen die Spitze eher geschadet (nicht signifikant).
+- Standard 30 % Siege, aber **32 % Letzter** (73 von 226), mittlere Platzierung 2,59. Die Spitze ist in 12–20 % der
+  Partien Letzter.
+
+**Timeouts kosten Partien.** Antwortet der Server zu spät, wiederholt die Engine den letzten Zug.
+
+- Seit dem Deploy: Duell 73 Timeouts in 52 von 228 Partien, **11 der 120 Niederlagen im Timeout-Zug**. Standard 37
+  Timeouts, 6 Tode im Timeout-Zug. Royale 4, Constrictor 1. Rate 6,9 pro 10 000 Züge.
+- 15 von 58 Timeouts treffen im selben Zug auch den Gegner, die Aussetzer liegen also zum Teil bei der Engine. Andere
+  Snakes: Kaisel (p50 250 ms) 1,9 pro 10k, NMC² (319 ms) 0 in 10k Zügen, Odiodin (361 ms) 2,4, Bwukinator (446 ms) 16.
+  Unsere Latenz-Ausreißer: 3,3 pro 10k liegen 50–100 ms über dem Normalwert, 0,5 liegen 100–118 ms darüber, 6,9 sind
+  Timeouts. Wer 100 ms früher antwortet, entgeht also etwa der Hälfte bis zwei Dritteln.
+- ✅ **Timeout-Regel in der Suche** (`SearchConfig::fallback`, `EARLY_MS` 100, `LATE_MS` 60): Ist der Timeout-Zug
+  (geradeaus) tödlich oder mehr als 25 Punkte schlechter als unser Zug, endet die Suche 100 ms früher. Ist er ohnehin
+  unser Zug, darf sie 60 ms länger rechnen, ein Timeout kostet dann nichts. Auf 1970 Arena-Zügen im Duell (`timing`,
+  Budget 300): 12 % früh, 38 % normal, 50 % spät, mittlere Rechenzeit 318 statt 300 ms. Standard: 17 / 41 / 42 %.
+  Im Self-Play nicht messbar (keine Latenz-Ausreißer). Arena-Metrik: „died in a timeout turn“ in `arena.py report`.
+  Mit der Regel steigt die Zahl der Timeouts (die späten Antworten riskieren sie bewusst), zählen darf nur der Tod.
+- **Tageszeit:** 11-08 bis 11-11 hatten zwischen 09 und 18 Uhr UTC 15,7 % unserer Partien mindestens einen Timeout
+  (98 von 625, 23 Tode im Timeout-Zug), in der übrigen Zeit 8,3 % (78 von 943, 10 Tode). Die mittlere Latenz ist zu
+  beiden Zeiten 380 ms. Die Aussetzer hängen also an der Last am Tag (Server oder Netz), nicht an der Rechenzeit.
+  Vor der zweiten Snake (`/v/dev`) klären: Was läuft tagsüber noch auf dem Host?
+
+**Standard: Wir verstecken uns am Rand und fressen nicht.** Alle Snakes mit ≥ 40 Partien im Datensatz, Züge mit
+≥ 3 lebenden Schlangen:
+
+| Snake | Platz | Länge Zug 60 / 100 | Abstand zur Mitte Zug < 30 | Rand Zug < 30 |
+|---|---|---|---|---|
+| Oberon Orange | 2,07 | 8,9 / 11,5 | 4,21 | 14,0 % |
+| rattler | 2,10 | 7,9 / 10,3 | 4,73 | 18,9 % |
+| AlphaSlinky | 2,32 | 8,2 / 10,7 | 4,53 | 19,8 % |
+| Bwukinator | 2,40 | 7,4 / 9,6 | 4,26 | 14,6 % |
+| NMC² | 2,45 | 7,5 / 10,3 | 4,14 | 12,6 % |
+| **honey_badger** | **2,60** | **6,6 / 8,6** | **6,27** | **37,8 %** |
+
+In den 73 Partien, in denen wir zuerst ausscheiden, sind wir 64-mal mindestens 3 kürzer als der Längste (Länge 4–5 bei
+Zug 60–100), 63-mal höchstens ein Feld vom Rand, 39-mal Kopf-an-Kopf gegen einen Längeren, 8-mal verhungert (4-mal mit
+Länge 4 bei Zug 102, also ohne ein einziges Futter nach dem ersten). Beispiel `ebe34a40`: Hunger 17, freies Futter
+5 Felder entfernt, wir bleiben in der Ecke. Die Ursache ist die Koalition in der paranoiden Suche, nicht die Gewichte
+(wie in Runde 7 vermutet): Jeder Weg ins Freie hat irgendeine gemeinsame Antwort aller drei Gegner, die ihn bestraft.
+
+✅ **Fokus-Suche** (`SearchConfig::focus`, aus): pro Gegner eine eigene Suche, in der nur dieser Gegner und jeder
+Gegner mit Kopfabstand ≤ 2 frei wählt, die anderen spielen ihren Heuristik-Zug. Der erste Halbzug bleibt voll
+paranoid. Der Wert eines Zugs ist das Minimum über die Suchen. Ein einzelner Gegner darf uns also jagen, eine
+Verabredung aller drei gibt es nicht. Mit geteilter Alpha-Schranke zwischen den Teilsuchen, ein Thread pro Wurzelzug.
+
+Stellungstest Standard (Züge der Top 8 in ihren Siegen, 538 Partien, 50 ms, ≥ 3 lebende Schlangen, n = 5517, gepaart
+gegen die Basis mit 62,4 %; zwei Basis-Läufe unterscheiden sich um 0,2 Punkte):
+
+| Variante | Übereinstimmung | z | 4 lebend | 3 lebend |
+|---|---|---|---|---|
+| `deep_ply` 2, `deep_min_opps` 3 (Kandidat aus Runde 7) | 62,9 % | +0,9 | 62,7 % | 63,1 % |
+| Fokus (volle Fenster) | 64,3 % | +2,9 | 64,1 % | 64,6 % |
+| Fokus (geteilte Schranke) | 63,8 % | +2,2 | 63,6 % | 64,2 % |
+| **Fokus + `smart`** (volle Fenster / geteilte Schranke) | **64,7 % / 64,7 %** | **+3,5** / +3,5 | 64,8 % | 64,6 % |
+
+Self-Play Standard, 40 ms, je 200 Partien, A gegen B = Basis, mit Verhalten von A (Basis: Mitte 5,5, Rand 30 %,
+Länge bei Zug 100: 10,4):
+
+| A | Feld | Elo [95 %] | Mitte < 30 | Rand < 30 | Länge 60 / 100 | zuerst raus A / B |
+|---|---|---|---|---|---|---|
+| Fokus | 2 × Basis | **+42** [−6, +92] | 4,11 | 13,4 % | 8,8 / 11,7 | 22,0 / 21,5 % |
+| Fokus + `smart` | 2 × Basis | +3 [−45, +52] | 4,44 | 15,5 % | 8,8 / 12,0 | 25,5 / 24,0 % |
+| Fokus + `smart` | 2 × „hungry“ | **+56** [+8, +106] | 4,40 | 15,3 % | 8,8 / 11,7 | 21,5 / 25,0 % |
+| Fokus + `smart` | keins (2 gegen 2) | **+96** [+48, +149] | 4,58 | 16,3 % | 8,6 / 11,4 | 20,0 / 30,2 % |
+
+Diese vier Läufe liefen noch mit vollen Fenstern. Mit geteilter Schranke (Stand im Code), neuer Seed, je 200 Partien:
+
+| A | B | Feld | Elo [95 %] | Mitte < 30 | Rand < 30 | zuerst raus A / B |
+|---|---|---|---|---|---|---|
+| Fokus | Basis | 2 × „hungry“ | +37 [−11, +86] | 4,09 | 12,2 % | 21,0 / 21,0 % |
+| Fokus + `smart` | Basis | 2 × Basis | +35 [−13, +84] | 4,41 | 15,3 % | 21,5 / 25,5 % |
+| Fokus | Basis | 2 × Fokus | **+85** [+37, +137] | 4,40 | 13,0 % | 24,0 / **32,5 %** |
+| Fokus + `smart` | Fokus | 2 × Basis | +14 [−34, +63] | 4,49 | 14,7 % | 15,5 / 24,0 % |
+
+Alle sieben Läufe Fokus gegen Basis zusammen: 800–599 bei einem Remis (57,2 %, etwa **+50 Elo**, z ≈ 5,4). Das ist die
+erste Variante gegen die Paranoia, die im Self-Play gewinnt (Runde 7: −9 bis −87), und sie trifft das Verhalten der
+Spitze: Mitte 4,1–4,6 (Spitze 4,1–4,7), Rand 12–16 % (Spitze 13–20 %), Länge bei Zug 100 um 11,5. In einem Feld aus
+Fokus-Schlangen scheidet die Basis in 32,5 % der Partien zuerst aus, so oft wie in der Arena (32 %): Gegen aktive
+Gegner verliert das Verstecken. `smart` ist gegen Fokus allein nicht belegt (+14 ± 49), hat aber den besseren
+Stellungstest und scheidet seltener zuerst aus. **Kandidat: `{"standard":{"focus":true,"smart":true}}`.**
+
+✅ Übernommen (`config_for`: `focus` und `smart_default` im Modus Standard, also ≥ 2 lebende Gegner ohne Royale und
+Constrictor). Gegenprobe mit dem Produktiv-Binary gegen die Variante `{"standard":{"focus":false,"smart":false}}`,
+40 ms, 120 Partien 2 gegen 2, neuer Seed: 77–42 bei einem Remis (+104 [+42, +174]), Mitte 4,48 gegen 5,40, Rand 15,3
+gegen 26,8 %. Im Server geprüft mit einer Arena-Stellung (Tiefe 8 in 190 ms bei 4 Schlangen).
+
+**Duell: Was sagt bei der Spitze den Sieg voraus?** Regression Sieg gegen Merkmale (`duelfeat`, `tools/fit_duel.py`),
+nur Partien Top 7 gegen Top 7, nur Stellungen mindestens 25 Züge vor dem Ende, 18 504 Zeilen. Koeffizienten in Logit:
+
+| Gesamtlänge beider Schlangen | Gebietsdifferenz je 10 Felder | Vorsprung ≥ 1 | zusätzlich ≥ 2 | zusätzlich ≥ 4 |
+|---|---|---|---|---|
+| < 16 | −0,06 (z −5) | +0,17 | +0,65 | +0,89 |
+| 16–26 | −0,12 (z −10) | +0,36 | +0,76 | −0,37 |
+| 26–38 | −0,04 (z −4) | +0,46 | −0,09 | +0,23 |
+| 38–52 | +0,06 (z +6) | **+1,22** | +0,03 | −0,38 |
+| 52–70 | **+0,38 (z +22)** | +0,50 | +0,19 | −0,15 |
+| ≥ 70 | +0,19 (z +8) | −1,59 | +0,13 | −0,71 |
+
+- **Gebiet sagt erst bei vollem Brett etwas voraus** (ab etwa 50 Gesamtlänge), davor nichts oder das Gegenteil. Nach
+  Zugzahl dasselbe Bild: bis Zug 150 negativ, 150–300 null, ab 300 stark. Unsere Bewertung gibt dem Gebiet von Zug 1 an
+  volles Gewicht. Beispiel `0171730d` gegen Odiodin: Zug 35–71 Gebiet 90 gegen 30, wir bleiben bei Länge 7 und lassen
+  ein freies Futter 25 Züge liegen, der Gegner wächst von 7 auf 10.
+- **Ein Längenvorsprung von 1–2 ist bis etwa 50 Gesamtlänge der stärkste Hebel** (68–72 % Siege bei +1 bis +3 in Zug
+  150–300), mehr als +4 bringt nichts oder schadet, und bei sehr vollem Brett (≥ 70) schadet Länge. Das Abklingen
+  nach Zugzahl aus Runde 7 (Halbwertszeit 150) setzt also zu früh ein.
+- Vorsicht bei „Länge am Spielende“: hinten mit 1–5 heißt 2 Siege aus 53, aber das ist die Einschnürung am Schluss,
+  keine Ursache. 30 Züge vor dem Ende ist der Zusammenhang bei uns schwach.
+- Die Spitze spielt verschieden: Shai-Hulud v5 und AlphaSlinky fressen (+3,5 / +2,0 Länge bei Zug 100), NMC² gewinnt
+  ohne Längenvorsprung (−1,0), Odiodin liegt früh vorn (+1,8) und steht häufiger am Rand als wir (21 % gegen 11 %).
+
+Neue Gewichte dafür (aus): `area_open`, `crowd_lo`, `crowd_hi` (Gebiet nach Gesamtlänge skalieren), `fade_lo`,
+`fade_hi` (Längenterme nach Gesamtlänge statt nach Zugzahl abklingen lassen).
+
+Stellungstest Duell (Züge der Top 7 in ihren Siegen, 621 Duelle, 50 ms, n = 13 678, Basis 63,8 %, gepaart):
+
+| Variante | gesamt | z | Zug < 30 | Zug 30–100 | Zug ≥ 100 | Zug ≥ 250 |
+|---|---|---|---|---|---|---|
+| Basis (Produktion) | 63,8 % | | 72,3 % | 66,8 % | 62,2 % | 62,9 % |
+| ohne Längen-Abklingen (`length_half` 0) | 63,1 % | −2,8 | 72,6 % | 66,6 % | 61,3 % (z −3,2) | 61,7 % (z −3,7) |
+| `area_open` 0.3 (Gesamtlänge 30–55) | 63,3 % | −1,6 | **75,5 % (z +2,3)** | 66,2 % | 61,3 % (z −2,8) | 62,2 % |
+| `area_open` 0 | 60,3 % | −9,4 | 70,6 % | 60,5 % | 59,2 % | 61,8 % |
+| `area_open` 0.3 + Abklingen nach Gesamtlänge 50–75 | 62,0 % | −5,0 | 75,9 % (z +2,6) | 65,5 % | 59,7 % | 60,4 % |
+| dasselbe + `length_cap` 3, `want_length_lead` 2 | 63,9 % | +0,1 | 75,2 % (z +2,1) | 66,7 % | 61,9 % | 62,4 % |
+
+➖ **Die Regression trägt nicht bis in die Zugwahl.** Weniger Gebiet passt nur in der Eröffnung besser zu den Zügen
+der Spitze (+3 Punkte bei Zug < 30), danach schlechter. Das Längen-Abklingen nach Zugzahl bleibt: Ohne es fällt die
+Übereinstimmung spät (z −3,7) und die Fehlgriffe steigen von 1,0 auf 2,4 %. Lehre: Ein Merkmal, das am Brett den
+Ausgang nicht vorhersagt, kann am Suchhorizont trotzdem die richtigen Züge auswählen. Erst Stellungstest, dann glauben.
+
+Nur Eröffnung (`area_open` mit `crowd_lo` 8, `crowd_hi` 18): 0.3 ergibt 64,0 % (z +1,5), Zug < 30: 75,5 % (z +2,6);
+0.0 ergibt 63,9 %, Zug < 30: 76,1 % (z +2,8), später schlechter (z −2,6 ab Zug 250).
+
+Self-Play Duell gegen die Produktion, 20 ms, je 400 Spiele:
+
+| Variante | Elo [95 %] |
+|---|---|
+| `area_open` 0.3 nur Eröffnung (8–18) | −24 [−59, +9] |
+| `area_open` 0.3 (30–55) | −31 [−66, +3] |
+| `area_open` 0.3 + Abklingen nach Gesamtlänge + `length_cap` 3, `want_length_lead` 2 | −26 [−61, +8] |
+
+❌ Für das Duell nichts übernommen. Die Schalter bleiben im Code (aus).
+
+Ein-Gewicht-Reihe Duell im Stellungstest (n = 13 678, Basis 63,8 %): `opp_area` 1.0 kommt auf 64,2 % (z +1,8, aber
+Fehlgriffe 1,6 statt 1,0 %), `eat_early` 16 auf 63,2 % (z −3,3). Alles andere liegt innerhalb von ±0,2 Punkten
+(|z| < 2): `food_dist` 3 / 0.75, `opp_area` 0.3, `edge` 3, `center` 1, `trap` 12, `longest_bonus` 30, `length` 35 / 15,
+`want_length_lead` 2 / 8, `hunger_health` 60, `parity` 0, `eat_early` 0, `food_contest` 1, `length_half` 300.
+➖ Die Duell-Gewichte liegen auf einem Plateau. Gegen die Top 5 braucht es neue Terme oder eine andere Suche, kein
+Gewichts-Tuning (siehe offene Ideen, Punkt 4).
+
+**Fehlersammlung Duell** (`blunders` mit 4 s, Tiefe 16–22, 25 verlorene Duelle): 3 echte Fehlzüge (der gespielte Zug
+ist bewiesen verloren, ein anderer nicht), 4 Timeout-Tode, 18 „still“: Die letzte nicht verlorene Stellung liegt
+13–24 Züge vor dem Tod, der Score dort schon bei −100 bis −380. Die Duelle gehen also strategisch verloren, mehr
+Tiefe allein löst das nicht.
 
 ### Runde 7 (2026-11-09): Arena seit `0357c78` und Längen-Abklingen im Duell
 
@@ -457,26 +614,34 @@ Die Zeilen ab `food_contest`-Gradient bis zur logistischen Regression liefen noc
 
 ## Offene Ideen / nächste Schritte
 
-Grob nach erwartetem Nutzen sortiert.
+Stand 2026-11-11, nach erwartetem Nutzen sortiert. Ältere Listen stehen in den Runden oben.
 
-1. **Arena-Wirkung von Runde 1+2 prüfen:** Timeouts weg? Längendifferenz bei Zug 100 besser?
-   Rating-Verlauf?
-2. **Evaluation beschleunigen:** Voronoi braucht etwa 600 ns. Ideen: inkrementell rechnen,
-   bei großen Bodies früher abbrechen, `advance` mit Bitboard-Belegung statt Body-Iteration,
-   `VecDeque` durch einen festen Ringpuffer ersetzen (spart die Allokationen beim Clone).
-3. **4er-Paranoid entschärfen:** Alle Gegner kooperieren gegen uns, das ist sehr pessimistisch.
-   Alternativen: Max-N oder „Best-Reply-Search“ (nur der gefährlichste Gegner antwortet voll).
-   Achtung: Weniger Gegner voll durchrechnen hat bisher nicht geholfen (Reach-Cap ❌,
-   `max_relevant` 2 ➖).
-4. **Abdrängen an der Wand erkennen:** Ein Eval-Term für einen größeren Gegnerkopf, der parallel
-   neben uns an der Wand läuft, oder für Fluchtkorridore (zum Beispiel Größe der Region, die wir
-   *vor* allen anderen erreichen, nach 2–3 Schritten).
-5. **Futter-Rennen im Duell:** Die Gegner wachsen früh schneller. Die Hungerschwelle
-   (`hunger_health`) und eine Futter-Kontrolle (Futter nahe dem Gegner wegnehmen) testen.
-6. **`longest_bonus` 30** mit mehr Spielen nachtesten (+31 im Duell, unsicher).
-7. **Transposition Table:** bisher bewusst nicht gebaut. Gleiche Stellungen sind selten, weil
-   sich die Bodies unterscheiden, und die Killer-Züge übernehmen die Sortierung schon.
-   Vielleicht nur zur Zugsortierung.
-8. **Zeitmanagement:** Wenn ein Spiel einen Timeout hatte, für den Rest des Spiels ein größeres
-   Sicherheitspolster nehmen. Prüfen, ob `MAX_BUDGET_MS` in Coolify gesetzt ist (es überschreibt
-   den Default).
+1. **Deploy vom 11-11 19:10 UTC auswerten** (frühestens 11-12 abends, etwa 100 Duelle und 100 Standard-Partien):
+   `tools/arena.py report --since '2026-11-11 19:30'`. Erwartung in Standard: Anteil „Letzter“ unter 25 % (vorher
+   32 %), Länge bei Zug 100 über 10 (8,6), Rand in Zug < 30 unter 20 % (38 %), mittlere Platzierung unter 2,45 (2,59).
+   Erwartung für die Timeout-Regel: Tode im Timeout-Zug etwa halbiert (vorher 2,1 % der Partien), am Tag getrennt
+   von der Nacht ansehen. Im Duell ändert sich sonst nichts, die Siegquote dort ist die Kontrolle (47 %).
+   Fällt Standard schlechter aus: `focus`/`smart_default` in `config_for` wieder aus, die Timeout-Regel bleibt.
+2. **Varianten-Snake anlegen** (`/v/dev`, siehe CLAUDE.md). Damit laufen Arena-Tests parallel zur Produktion, und
+   jede weitere Idee braucht keinen Tag Wartezeit mehr. Das ist der größte Hebel für das Tempo der Entwicklung.
+3. **Echte Gegner lokal.** Quelloffene Snakes (zum Beispiel `snork`, MIT) lokal bauen und über `sim --bhttp` als
+   Sparringspartner nutzen. Self-Play gegen eigene Klone bleibt sonst die einzige Elo-Quelle. Fremden Code nur mit
+   Freigabe des Nutzers bauen und ausführen.
+4. **Duell gegen die Top 5 (15 % Siege) ist offen.** Bisherige Befunde: Die Niederlagen sind strategisch (Runde 8,
+   Fehlersammlung), Gebiets- und Längengewichte nach Brettfüllung helfen nicht (Stellungstest). Nächste Ansätze:
+   - Gewichte am Stellungstest ausrichten: Ein-Gewicht-Reihe steht in Runde 8, die besten Richtungen kombinieren
+     und im Self-Play und Gegnerpool gegenprüfen.
+   - Taschen erkennen: In `0171730d` (Zug 204–216) bauen wir uns mit dem eigenen Körper eine Tasche mit einem Ausgang,
+     der Gegner schließt ihn 9 Züge später. Idee: Gebiet an Engstellen zerlegen (Kammerbaum), nur zählen, was durch
+     einen Ausgang erreichbar bleibt, den der Gegner nicht vor uns erreicht.
+   - Prüfen, ob mehr Tiefe diese Stellungen löst: `trace` mit 100 ms gegen 2000 ms auf denselben Zügen. Wenn ja,
+     lohnt Punkt 5.
+5. **Tempo.** Die Blätter kosten etwa 600 ns, davon Voronoi 350–400. Die Voronoi-Schleife läuft mindestens so viele
+   Runden wie die längste Schlange lang ist, auch wenn längst alles verteilt ist: früher abbrechen, wenn kein
+   blockiertes Feld mehr an ein Gebiet grenzt. Dazu `safe_moves` über eine Belegungs-Bitmaske statt über alle
+   Körperfelder. Erwartung aus Runde 6: Verdopplung bringt im Duell +0,7 Züge Tiefe, in Standard +0,3.
+6. **Fokus-Suche verfeinern:** `focus_reach` 1/3, Heuristik-Zug der übrigen Gegner (`smart` an der Vorhersagequote in
+   `policy` weiter tunen), Fokus auch im Royale testen.
+7. **Royale:** 84 von 152 Toden durch Hazard, 34 durch Hunger (seit 11-09). Bewertungsterm für die Rückkehr aus dem
+   Hazard (Runde 5), nachrangig.
+8. **Constrictor:** Messung im Self-Play reparieren (Runde 6), nachrangig.
