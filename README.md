@@ -13,6 +13,9 @@ A competitive [Battlesnake](https://play.battlesnake.com) written in Rust.
   depth get one cheap heuristic move each, which keeps 4-player games deep enough. The last remaining
   opponent is always searched in full, so a proven win never rests on a guessed move. Each root move is
   searched on its own thread. Killer moves order both max and min nodes.
+  For multi-player games there is a **focus search** (`SearchConfig::focus`): one search per opponent in
+  which only that opponent and any opponent next to our head choose freely, and the worst case over these
+  searches decides. Real opponents do not coordinate, and the coalition search hides at the wall.
 * **Evaluation** (`src/eval.rs`): a **tail-aware Voronoi** territory count. Cells become available
   once the body segment on them has moved away. It runs as a `u128` bitboard on 11x11 (~0.5 µs).
   Terms: territory vs. the strongest opponent, length advantage, food distance when hungry or not
@@ -20,11 +23,14 @@ A competitive [Battlesnake](https://play.battlesnake.com) written in Rust.
   hazard cells.
 * **Time management** (`src/main.rs`): the engine reports our latency every turn. The server
   subtracts its own compute time from that to estimate the network overhead per game, then sizes
-  the search budget as `timeout - network - safety`.
+  the search budget as `timeout - network - safety`. A late answer makes the engine repeat our last
+  move, so the search answers `EARLY_MS` sooner while that move would be costly and takes up to
+  `LATE_MS` longer while it is its own choice anyway.
 
-## Experiment log
+## Experiment log and workflow
 
-Tried approaches, their self-play results and next ideas: [EXPERIMENTS.md](EXPERIMENTS.md).
+Tried approaches, their results and next ideas: [EXPERIMENTS.md](EXPERIMENTS.md). How to work on this
+snake (data pipeline, test ladder, arena A/B): [CLAUDE.md](CLAUDE.md).
 
 ## Run locally
 
@@ -39,7 +45,7 @@ cargo test --release           # rules + evaluation tests
 # A vs B, weights given as (partial) JSON, see eval::Weights
 cargo run --release --bin sim -- --mode duel --games 200 --ms 15 --a '{"length":10}' --b '{}'
 # modes: duel | standard | royale | constrictor
-tools/tune.sh duel 200 10 '{}' '{"food_dist":3}' '{"trap":15}'
+tools/tune.sh duel 200 10 '{"weights":{"food_dist":3}}' '{"weights":{"trap":15}}'
 cargo run --release --bin bench -- tests/fixtures/standard.json 300   # search depth / speed
 ```
 
@@ -70,6 +76,9 @@ cargo run --release --bin bench -- tests/fixtures/standard.json 300   # search d
 | `SNAKE_TAIL`      | `sharp`   |                                                                 |
 | `SNAKE_AUTHOR`    | `nickhrm` |                                                                 |
 | `SNAKE_WEIGHTS`   | –         | JSON that overrides all evaluation weights (for experiments)    |
+| `EARLY_MS`        | `100`     | answer this much sooner while a timeout would be costly         |
+| `LATE_MS`         | `60`      | think this much longer while the timeout move is our own choice |
+| `SNAKE_VARIANTS`  | –         | JSON object of experiment variants served under `/v/<name>/`    |
 
 ### Latency matters
 

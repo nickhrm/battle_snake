@@ -2,6 +2,9 @@
 
 Rohe Skripte, unverändert aus der Analyse übernommen. Daten liegen nicht im Repo.
 
+Für neue Auswertungen gilt `tools/arena.py` (lädt nach `data/`, siehe CLAUDE.md). Die Skripte hier erwarten noch
+das alte Layout `<root>/pages`, `<root>/games` und sind nur als Vorlage gedacht.
+
 `<root>` ist ein Arbeitsordner außerhalb des Repos. Skripte, die Downloads lesen, mit `python3 -I` starten.
 
 | Skript | Zweck | Aufruf |

@@ -2,3 +2,4 @@
 *.log
 nohup.out
 .claude/settings.local.json
+/data
