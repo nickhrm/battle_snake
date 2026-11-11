@@ -53,6 +53,7 @@ Diese Datei beschreibt, wie hier gearbeitet wird. Was schon probiert wurde und w
       B nach Überlebensdauer). `SIM_BEHAVIOUR=1` druckt das Verhalten (Abstand zur Mitte, Randanteil, Länge bei Zug
       60/100): Zielwerte der Spitze in Standard sind Mitte 4,2–4,7, Rand 14–19 %, Länge bei Zug 100 ≥ 10.
    4. **Gegnerpool** `tools/gauntlet.sh <mode> <games> <ms> '<gewichte>'`: nicht nur gegen uns selbst.
+      Dazu `tools/opponents.sh spar <mode> <games> '<variante>'...` gegen snork (siehe „Fremde Gegner“).
    5. **Fehlersammlung** `target/release/blunders 4000 honey_badger <verlorene duelle> > suite.jsonl`, dann
       `target/release/suite 300 suite.jsonl`: vermeidet die Variante die bewiesenen Verlustzüge?
 5. **In der Arena messen.** Am besten parallel über die Varianten-Snake (unten). Sonst deployen und nach einem Tag
@@ -72,6 +73,16 @@ eintragen. Beide spielen gleichzeitig gegen dasselbe Feld, der Vergleich braucht
 `MOVE ... v=dev` kennzeichnet die Variante. Achtung Rechenlast: Beide teilen sich die Kerne, wenn ihre Partien
 gleichzeitig laufen.
 
+## Fremde Gegner (Sparring)
+
+`tools/opponents.sh fetch` und `build` holen und bauen quelloffene Snakes nach `data/opponents/` (vom Nutzer
+freigegeben, nur lokal, nichts davon ins Repo übernehmen). `tools/opponents.sh spar duel 100 '{}' '<variante>'` spielt
+jede Variante gegen **snork** (Agent `Flood`, 160 ms auf 4 Threads gegen unsere 40 ms auf einem): Das ist im Duell
+etwa ausgeglichen und damit empfindlich für Verbesserungen. Die Sim nimmt fremde Snakes als Spieler B über
+`--bhttp host:port[/pfad]` (Server) oder `--bcmd <programm>` (CGI-Programm wie Sandworm, Anfrage auf stdin).
+Achtung: snork rechnet erst ab 150 ms Zeitlimit wirklich, darunter spielt es einen Zug tief. Nicht mehr als 4 Spiele
+gleichzeitig (`THREADS`), sonst verfälscht die Last beide Seiten.
+
 ## Messfallen
 
 - **Self-Play misst nur gegen uns selbst.** Eine Schwäche, die beide Seiten haben, bleibt unsichtbar (so blieb das
@@ -90,7 +101,7 @@ gleichzeitig laufen.
 
 | Binary | Zweck |
 |---|---|
-| `sim` | Self-Play mit offiziellen Regeln, Varianten, Feld, Verhaltensstatistik |
+| `sim` | Self-Play mit offiziellen Regeln, Varianten, Feld, Verhaltensstatistik, fremde Gegner (`--bhttp`, `--bcmd`) |
 | `bench` | Tiefe und Knoten/s auf einer Stellung (`VARIANT`, `BENCH_TIMEOUT=early,late`) |
 | `agree` | unsere Züge gegen die gespielten Züge in Arena-Partien (Stellungstest) |
 | `trace`, `pos` | Score-Verlauf einer Partie, Stellung als Anfrage-JSON |

@@ -98,6 +98,38 @@ in [CLAUDE.md](CLAUDE.md). Hier nur die Zahlen, die man dafür braucht:
 Elo-Werte sind aus Self-Play, Variante (A) gegen die Basis (B). ✅ übernommen, ❌ verworfen,
 ➖ neutral bzw. nicht übernommen.
 
+### Runde 9 (2026-11-11 abends): fremde Snakes als Sparringspartner
+
+Der Nutzer hat erlaubt, quelloffene Snakes lokal zu bauen. Aufbau und Bedienung: CLAUDE.md, „Fremde Gegner“,
+`tools/opponents.sh`. Die Sim kann jetzt neben `--bhttp` (mit Pfad) auch CGI-Programme (`--bcmd`).
+
+- **snork** (`wrenger/snork`, Rust, MIT, Stand 2024-08; laut README früher Platz 1–2 der Arena). Agent `Flood`:
+  MaxN-Suche über eine Flood-Fill-Bewertung, 5–6 Züge tief in 160 ms.
+  - Zeitlimit ≤ 150 ms: snork spielt nur einen Zug tief, wir gewinnen 39–1 (40 Duelle). Nicht verwertbar.
+  - 160 ms für snork (alle Kerne, 4 Spiele gleichzeitig, Last 18 auf 16 Kernen) gegen unsere 40 ms auf einem Thread:
+    **20–20** (40 Duelle, ±111 Elo), mittlere Länge 299 Züge.
+  - Über `tools/opponents.sh spar` (snork auf 4 Threads begrenzt, Last 4): **13–11** (24 Duelle, ±150 Elo), 335 Züge,
+    3 Timeouts von snork. Beide Läufe zusammen 33–31. Das ist die Grundlinie, nicht mehr.
+  - Damit gibt es erstmals einen fremden Gegner auf Augenhöhe für Duell-Varianten. Wegen ±111 Elo bei 40 Spielen
+    braucht ein Urteil 200+ Spiele (etwa 15 s pro Spiel bei 4 parallel, also rund 50 Minuten).
+- **Was snork anders bewertet** (`src/agents/flood.rs`, nur gelesen): (1) Der Längenvorteil zählt als
+  `sqrt((eigene Länge + Futternähe) / Länge des Gegners)` und klingt mit `2^(−0,041 · Zug)` ab, also mit einer
+  **Halbwertszeit von 24 Zügen** (unser Duell-Profil: 150 Züge, mindestens 30 %). Ab etwa Zug 100 spielt snork fast
+  nur noch auf Raum. (2) Raum zählt als **Anteil hoch drei**, `(eigen / (eigen + Gegner))³`, nicht als Differenz:
+  Ein Vorsprung wird überproportional belohnt, ein kleiner Rückstand kostet wenig. (3) Der Raum wird nach der
+  Gesundheit gewichtet, mit der ein Feld erreicht wird (`count_health`). Das ist ein Hinweis für das offene
+  Duell-Problem: Ein Gegner mit 5–6 Zügen Suchtiefe hält mit uns mit (wir: 8–10 bei 40 ms, `bench`), der Unterschied liegt also in der Bewertung.
+  Die Regression aus Runde 8 (Gebiet zählt erst bei vollem Brett) widerspricht dem nicht, snork wurde aber auf
+  Siege optimiert (Bayes-Optimierung im Self-Play), nicht auf Vorhersage.
+- **Sandworm** (`Bricktech2000/Sandworm`, C, 579 Zeilen, keine Lizenzdatei; Arena Duell #17 mit 36,5, im Oktober 2025
+  laut README Platz 5): paranoides Minimax über Voronoi auf Bitboards wie wir, ein Thread, Tiefe 20–24 Halbzüge in
+  400 ms. Es nutzt dieselbe Timeout-Regel wie wir seit Runde 8 (länger rechnen, wenn der beste Zug der letzte Zug
+  ist). Geklont, Code durchgesehen (kein Datei-, Prozess- oder Netzzugriff), **aber noch nicht gebaut**: Der
+  Sicherheitsfilter der Sitzung hat den `gcc`-Aufruf abgelehnt. `tools/opponents.sh build` baut es, wenn der Nutzer
+  es selbst startet; danach `sim --bcmd data/opponents/build/sandworm50 --timeout 70`.
+- **Hovering Hobbs** (`coreyja/battlesnake-rs`, Arena Duell #18, unsere Bilanz 6–2): braucht ein Nightly-Rust von
+  2026-01 und bringt Telemetrie mit. Nicht gebaut, nachrangig.
+
 ### Runde 8 (2026-11-11): Datenbasis, Timeouts, Fokus-Suche für Standard, Gebiet nach Brettfüllung
 
 Datenbasis: 1945 Partien in `data/` (1547 eigene seit 11-06, dazu die letzten 60 Partien der Top 8 in Duell und
@@ -624,9 +656,10 @@ Stand 2026-11-11, nach erwartetem Nutzen sortiert. Ältere Listen stehen in den 
    Fällt Standard schlechter aus: `focus`/`smart_default` in `config_for` wieder aus, die Timeout-Regel bleibt.
 2. **Varianten-Snake anlegen** (`/v/dev`, siehe CLAUDE.md). Damit laufen Arena-Tests parallel zur Produktion, und
    jede weitere Idee braucht keinen Tag Wartezeit mehr. Das ist der größte Hebel für das Tempo der Entwicklung.
-3. **Echte Gegner lokal.** Quelloffene Snakes (zum Beispiel `snork`, MIT) lokal bauen und über `sim --bhttp` als
-   Sparringspartner nutzen. Self-Play gegen eigene Klone bleibt sonst die einzige Elo-Quelle. Fremden Code nur mit
-   Freigabe des Nutzers bauen und ausführen.
+3. **Bewertungsideen aus snork gegen snork testen** (Runde 9): Längen-Abklingen mit kurzer Halbwertszeit
+   (`length_half` 25–50 statt 150), Gebiet als Anteil hoch drei statt als Differenz (neuer Schalter in `eval.rs`),
+   Gebiet nach Gesundheit gewichtet. Messen mit `tools/opponents.sh spar duel 200 '{}' '<variante>'`, dazu wie immer
+   Stellungstest und Self-Play. Vorher Sandworm bauen (`tools/opponents.sh build`) und als zweiten Gegner einmessen.
 4. **Duell gegen die Top 5 (15 % Siege) ist offen.** Bisherige Befunde: Die Niederlagen sind strategisch (Runde 8,
    Fehlersammlung), Gebiets- und Längengewichte nach Brettfüllung helfen nicht (Stellungstest). Nächste Ansätze:
    - Gewichte am Stellungstest ausrichten: Ein-Gewicht-Reihe steht in Runde 8, die besten Richtungen kombinieren

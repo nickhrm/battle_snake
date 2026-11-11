@@ -33,8 +33,12 @@ struct Player {
     ms: u64,
     /// simple heuristic snake instead of the search (sparring partner)
     greedy: bool,
-    /// external snake server (e.g. "127.0.0.1:5001"), queried like the real engine does
+    /// external snake server (e.g. "127.0.0.1:5001" or "127.0.0.1:8000/v/dev"), queried like
+    /// the real engine does
     http: Option<String>,
+    /// external snake as a CGI-style program: started once per move, request JSON on stdin,
+    /// the answer (after optional header lines) on stdout
+    cmd: Option<String>,
     /// variant object (see `honey_badger::apply_variant`). With it the player uses the
     /// production config of every position plus the variant, exactly like the server does
     /// (including the switch to the duel profile once one opponent is left).
@@ -108,8 +112,26 @@ fn http_post(addr: &str, path: &str, body: &str, timeout: Duration) -> Option<St
     Some(buf[i + 4..].to_string())
 }
 
-/// Ask an external snake for its move; on timeout/error keep going straight (engine behaviour).
-fn http_move(addr: &str, st: &State, you: usize, mode: Mode, game_id: &str, timeout: u64) -> (Dir, bool) {
+/// Run a CGI-style snake: request on stdin, the JSON answer is the rest of stdout from the first '{'.
+fn cmd_post(program: &str, body: &str) -> Option<String> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    let mut child = Command::new(program)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap_or_else(|e| panic!("cannot start {program}: {e}"));
+    child.stdin.take()?.write_all(body.as_bytes()).ok()?;
+    let out = child.wait_with_output().ok()?;
+    let txt = String::from_utf8_lossy(&out.stdout);
+    let i = txt.find('{')?;
+    Some(txt[i..].to_string())
+}
+
+/// Ask an external snake (server or program) for its move; on timeout/error keep going
+/// straight (engine behaviour).
+fn external_move(p: &Player, st: &State, you: usize, mode: Mode, game_id: &str, timeout: u64) -> (Dir, bool) {
     let s = &st.snakes[you];
     let straight = {
         let r = &*st.rules;
@@ -124,7 +146,17 @@ fn http_move(addr: &str, st: &State, you: usize, mode: Mode, game_id: &str, time
     };
     let body = engine_json(st, you, mode, game_id, timeout);
     let t0 = Instant::now();
-    let resp = http_post(addr, "/move", &body, Duration::from_millis(timeout + 200));
+    let resp = match (&p.http, &p.cmd) {
+        (Some(addr), _) => {
+            let (host, prefix) = match addr.find('/') {
+                Some(i) => (&addr[..i], addr[i..].trim_end_matches('/')),
+                None => (addr.as_str(), ""),
+            };
+            http_post(host, &format!("{prefix}/move"), &body, Duration::from_millis(timeout + 200))
+        }
+        (None, Some(program)) => cmd_post(program, &body),
+        (None, None) => None,
+    };
     let late = t0.elapsed() > Duration::from_millis(timeout);
     let mv = resp.and_then(|b| {
         let v: serde_json::Value = serde_json::from_str(&b).ok()?;
@@ -263,6 +295,7 @@ fn parse_args() -> Args {
         ms: 20,
         greedy: false,
         http: None,
+        cmd: None,
         variant: None,
     };
     let mut b = a.clone();
@@ -305,6 +338,7 @@ fn parse_args() -> Args {
             "--xgreedy" => x_greedy = true,
             "--bgreedy" => b.greedy = true,
             "--bhttp" => b.http = Some(v()),
+            "--bcmd" => b.cmd = Some(v()),
             "--timeout" => timeout = v().parse().unwrap(),
             "--apar" => a.cfg.parallel = true,
             "--dump" => dump = Some(v()),
@@ -601,8 +635,8 @@ fn play(
                 moves[i] = greedy_move(&v);
                 continue;
             }
-            if let Some(addr) = &players[i].http {
-                let (m, to) = http_move(addr, &w.st, i, mode, &game_id, timeout);
+            if players[i].http.is_some() || players[i].cmd.is_some() {
+                let (m, to) = external_move(&players[i], &w.st, i, mode, &game_id, timeout);
                 if to {
                     timeouts.fetch_add(1, Ordering::Relaxed);
                 }
