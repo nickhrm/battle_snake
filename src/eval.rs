@@ -350,6 +350,198 @@ fn voronoi_bb_w<const W: u32>(st: &State, hazard_value: f32, parity: f32) -> Vor
     let order = &mut alive_idx[..na];
     order.sort_unstable_by(|&a, &b| lens[b].cmp(&lens[a]));
 
+    // groups of equal length (longest first): ends[k] is one past the last snake of group k
+    let mut ends = [0usize; 16];
+    let mut ng = 0;
+    for k in 0..na {
+        if k + 1 == na || lens[order[k + 1]] != lens[order[k]] {
+            ends[ng] = k + 1;
+            ng += 1;
+        }
+    }
+
+    // adj[i]: cells next to the region of snake i, adj_any: next to any region. A step can only
+    // change something while a free unclaimed cell lies in adj_any, so the many steps in which
+    // only body segments leave (long snakes) cost next to nothing.
+    let mut claimed: u128 = 0;
+    let mut adj = [0u128; 16];
+    let mut adj_any: u128 = 0;
+    for &i in order.iter() {
+        claimed |= owned[i];
+        adj[i] = expand(owned[i]);
+        adj_any |= adj[i];
+    }
+    let mut cand = [0u128; 16];
+    let mut t = 0usize;
+    loop {
+        t += 1;
+        if t <= max_t {
+            // segment k = len - t leaves at time t (stacked duplicates leave with the earlier one)
+            for &i in order.iter() {
+                let len = lens[i];
+                if t <= len {
+                    let k = len - t;
+                    let body = &st.snakes[i].body;
+                    if k == 0 || body[k] != body[k - 1] {
+                        blocked &= !(1u128 << body[k]);
+                    }
+                }
+            }
+        }
+        let avail = full & !blocked & !claimed;
+        if avail & adj_any == 0 {
+            if t >= max_t {
+                break;
+            }
+            continue;
+        }
+        let mut any = false;
+        let mut taken: u128 = 0;
+        let mut g = 0;
+        for &e in &ends[..ng] {
+            if e == g + 1 {
+                // a single snake of this length: no ties within the group
+                let i = order[g];
+                let new = adj[i] & avail & !taken;
+                if new != 0 {
+                    any = true;
+                    owned[i] |= new;
+                    let x = expand(new);
+                    adj[i] |= x;
+                    adj_any |= x;
+                    if out.food_dist[i] == NONE && new & food_bb != 0 {
+                        out.food_dist[i] = t as u16;
+                    }
+                    taken |= new;
+                }
+            } else {
+                let mut seen: u128 = 0;
+                let mut dup: u128 = 0;
+                for (k, &i) in order[g..e].iter().enumerate() {
+                    let c = adj[i] & avail & !taken;
+                    cand[k] = c;
+                    dup |= seen & c;
+                    seen |= c;
+                }
+                for (k, &i) in order[g..e].iter().enumerate() {
+                    let new = cand[k] & !dup;
+                    if new != 0 {
+                        any = true;
+                        owned[i] |= new;
+                        let x = expand(new);
+                        adj[i] |= x;
+                        adj_any |= x;
+                        if out.food_dist[i] == NONE && new & food_bb != 0 {
+                            out.food_dist[i] = t as u16;
+                        }
+                    }
+                }
+                taken |= seen;
+            }
+            g = e;
+        }
+        claimed |= taken;
+        if !any && t >= max_t {
+            break;
+        }
+        if t > n_cells as usize + 130 {
+            break;
+        }
+    }
+
+    let hz = rules.hazard_damage != 0 && rules.hazard_bb != 0;
+    for &i in order.iter() {
+        let o = owned[i];
+        let c = o.count_ones();
+        out.cells[i] = c as u16;
+        out.food_cnt[i] = (o & food_bb).count_ones() as u8;
+        out.area[i] = if hz {
+            let h = (o & rules.hazard_bb).count_ones();
+            (c - h) as f32 + h as f32 * hazard_value
+        } else {
+            c as f32
+        };
+        if parity != 0.0 {
+            // the path starts on the head's colour and alternates from there
+            let head = 1u128 << st.snakes[i].head();
+            let rest = o & !head;
+            let same_mask = if head & rules.even_bb != 0 {
+                rules.even_bb
+            } else {
+                !rules.even_bb
+            };
+            let same = (rest & same_mask).count_ones() as i32;
+            let other = rest.count_ones() as i32 - same;
+            let fill = 1 + if other > same { 2 * same + 1 } else { 2 * other };
+            out.area[i] -= parity * (c as i32 - fill).max(0) as f32;
+        }
+    }
+    out
+}
+
+/// The straightforward version of [`voronoi_bb_w`], kept as the reference for the test.
+#[cfg(test)]
+fn voronoi_bb_ref<const W: u32>(st: &State, hazard_value: f32, parity: f32) -> Voronoi {
+    let rules = &*st.rules;
+    let w = if W != 0 { W } else { rules.width as u32 };
+    let n_cells = rules.cells() as u32;
+    let full: u128 = if n_cells == 128 {
+        u128::MAX
+    } else {
+        (1u128 << n_cells) - 1
+    };
+    // column masks
+    let mut col0: u128 = 0;
+    let mut col_last: u128 = 0;
+    for y in 0..rules.height as u32 {
+        col0 |= 1u128 << (y * w);
+        col_last |= 1u128 << (y * w + w - 1);
+    }
+    let not_col0 = full & !col0;
+    
+    let not_col_last = full & !col_last;
+    let expand = |b: u128| -> u128 {
+        ((b << w) & full) | (b >> w) | ((b >> 1) & not_col_last) | ((b << 1) & not_col0)
+    };
+
+    let n = st.snakes.len().min(16);
+    let mut out = Voronoi {
+        area: [0.0; 16],
+        cells: [0; 16],
+        food_dist: [NONE; 16],
+        food_cnt: [0; 16],
+    };
+    let mut food_bb: u128 = 0;
+    for &f in &st.food {
+        food_bb |= 1u128 << f;
+    }
+
+    let mut max_t = 0usize;
+    let mut blocked: u128 = 0;
+    let mut owned = [0u128; 16];
+    let mut lens = [0usize; 16];
+    let mut alive_idx = [0usize; 16];
+    let mut na = 0;
+    for (i, s) in st.snakes.iter().enumerate().take(n) {
+        if !s.alive {
+            continue;
+        }
+        let len = s.len();
+        lens[i] = len;
+        alive_idx[na] = i;
+        na += 1;
+        for &c in s.body.iter() {
+            blocked |= 1u128 << c;
+        }
+        if !rules.constrictor {
+            max_t = max_t.max(len);
+        }
+        owned[i] = 1u128 << s.head();
+    }
+    // sort alive snakes by length (desc) for tie resolution
+    let order = &mut alive_idx[..na];
+    order.sort_unstable_by(|&a, &b| lens[b].cmp(&lens[a]));
+
     let mut claimed: u128 = 0;
     for &i in order.iter() {
         claimed |= owned[i];
@@ -657,5 +849,84 @@ mod tests {
         assert_eq!(plain.area[0], 5.0);
         // from the arm: centre, then one more arm; the other two arms stay unreachable
         assert_eq!(bound.area[0], 3.0);
+    }
+
+    /// Random playouts from the fixtures: the optimised bitboard Voronoi must give exactly the
+    /// same result as the reference version.
+    #[test]
+    fn bitboard_fast_path_matches_reference() {
+        use rand::rngs::SmallRng;
+        use rand::{Rng, SeedableRng};
+        let mut rng = SmallRng::seed_from_u64(7);
+        let mut checked = 0;
+        for fixture in ["duel", "standard", "false_win_duel"] {
+            let js = std::fs::read_to_string(format!("tests/fixtures/{fixture}.json")).unwrap();
+            let start = serde_json::from_str::<crate::api::GameState>(&js).unwrap().to_state();
+            for _ in 0..300 {
+                let mut st = start.clone();
+                for _ in 0..400 {
+                    if st.alive_count() < 2 {
+                        break;
+                    }
+                    for parity in [0.0, 0.5] {
+                        let a = voronoi_bb_w::<11>(&st, 0.25, parity);
+                        let b = voronoi_bb_ref::<11>(&st, 0.25, parity);
+                        assert_eq!(a.cells, b.cells, "turn {}", st.turn);
+                        assert_eq!(a.area, b.area);
+                        assert_eq!(a.food_dist, b.food_dist);
+                        assert_eq!(a.food_cnt, b.food_cnt);
+                    }
+                    checked += 1;
+                    let mut moves = Vec::new();
+                    for j in 0..st.snakes.len() {
+                        let mut m = [crate::game::Dir::Up; 4];
+                        let n = if st.snakes[j].alive { st.safe_moves(j, &mut m) } else { 0 };
+                        moves.push(if n == 0 { st.fallback_move(j) } else { m[rng.gen_range(0..n)] });
+                    }
+                    st.advance(&moves);
+                    // keep food on the board so the snakes grow long
+                    if st.food.len() < 3 {
+                        let c = rng.gen_range(0..st.rules.cells()) as u16;
+                        let free = !st.food.contains(&c) && !st.snakes.iter().any(|s| s.alive && s.body.contains(&c));
+                        if free {
+                            st.food.push(c);
+                        }
+                    }
+                }
+            }
+        }
+        assert!(checked > 10_000, "{checked}");
+    }
+
+    /// The same comparison on every position of the local arena games (`data/games`, not in the
+    /// repo): `cargo test --release arena_positions -- --ignored`.
+    #[test]
+    #[ignore]
+    fn bitboard_fast_path_matches_reference_on_arena_positions() {
+        let mut checked = 0usize;
+        let mut longest = 0usize;
+        for entry in std::fs::read_dir("data/games").expect("data/games").flatten().take(1500) {
+            let Some(rp) = crate::replay::Replay::load(entry.path().to_str().unwrap()) else { continue };
+            for i in 0..rp.frames.len() {
+                let Some(id) = rp.snakes(i).iter().find(|s| !crate::replay::is_dead(s)).map(|s| s["ID"].clone()) else { continue };
+                let Some(gs) = rp.request(i, &id) else { continue };
+                let st = gs.to_state();
+                if !st.rules.bitboard || st.rules.width != 11 {
+                    continue;
+                }
+                for parity in [0.0, 0.5] {
+                    let a = voronoi_bb_w::<11>(&st, 0.25, parity);
+                    let b = voronoi_bb_ref::<11>(&st, 0.25, parity);
+                    assert_eq!(a.cells, b.cells, "{} frame {i}", rp.id);
+                    assert_eq!(a.area, b.area, "{} frame {i}", rp.id);
+                    assert_eq!(a.food_dist, b.food_dist, "{} frame {i}", rp.id);
+                    assert_eq!(a.food_cnt, b.food_cnt, "{} frame {i}", rp.id);
+                }
+                checked += 1;
+                longest = longest.max(st.snakes.iter().map(|s| s.len()).max().unwrap_or(0));
+            }
+        }
+        println!("{checked} positions, longest snake {longest}");
+        assert!(checked > 0);
     }
 }
