@@ -5,7 +5,8 @@
   tools/arena.py board                                        print the current leaderboards
   tools/arena.py reindex                                      rebuild the index from the stored games
   tools/arena.py report [--since 'YYYY-MM-DD HH:MM'] [--until ...] [--mode duel]
-                                                              our results from the local copy
+                        [--opponents a,b] [--behaviour]       our results from the local copy
+                                                              (--behaviour: opening, length, food race)
 
 Games are stored slimmed as data/games/<id>.json in the format the Rust tools read
 ({"meta": ..., "frames": [...]}), one summary line per game in data/index.jsonl.
@@ -220,6 +221,9 @@ def cmd_report(a):
     until = ts(a.until) if a.until else 1e18
     games = [g for g in load_index().values()
              if since <= g["created"] < until and any(s["name"] == ME for s in g["snakes"])]
+    if a.opponents:
+        names = set(a.opponents.split(","))
+        games = [g for g in games if any(s["name"] in names for s in g["snakes"])]
     for mode in ("duel", "standard", "royale", "constrictor"):
         if a.mode and a.mode != mode:
             continue
@@ -232,6 +236,14 @@ def cmd_report(a):
               f"mean place {sum(s['place'] for s in me) / len(me):.2f}, "
               f"timeouts {sum(s['timeouts'] for s in me)} in {sum(1 for s in me if s['timeouts'])} games, "
               f"died in a timeout turn {sum(1 for s in me if s.get('timeout_death'))}")
+        n_snakes = max(len(g["snakes"]) for g in gs)
+        if n_snakes > 2:
+            # first out: died alone in the earliest death turn of the game
+            first = sum(1 for g, s in zip(gs, me) if s["death"] and s["place"] == len(g["snakes"]))
+            print("   place: " + ", ".join(f"{p}. {100 * sum(s['place'] == p for s in me) / len(me):.1f} %"
+                                           for p in range(1, n_snakes + 1)) + f", first out {100 * first / len(me):.1f} %")
+        if a.behaviour:
+            behaviour(gs)
         causes = collections.Counter(s["death"] for s in me if s["death"])
         print("   deaths:", ", ".join(f"{k} {v}" for k, v in causes.most_common()))
         dts = sorted(s["death_turn"] for s in me if s["death"])
@@ -254,6 +266,63 @@ def cmd_report(a):
             print(f"   {name[:28]:28s} {r[0]:4d} {r[1]:3d} {r[2]:4d}   {100 * r[0] / max(1, r[0] + r[2]):5.1f} %")
 
 
+def behaviour(gs):
+    """How we play, from the frames: position in the opening, length, and the race for food.
+
+    Food race: every food that appears in turn 1-60 and is eaten while both sides of a duel are
+    alive (multi-player: while we are alive), by who was closer when it appeared and who ate it.
+    """
+    cdist, edge, lens, leads = [], 0, collections.defaultdict(list), collections.defaultdict(list)
+    race = collections.Counter()
+    for g in gs:
+        try:
+            game = json.load(open(f"{ROOT}/games/{g['id']}.json"))
+        except FileNotFoundError:
+            continue
+        w, h = game["meta"]["Game"]["Width"], game["meta"]["Game"]["Height"]
+        frames = game["frames"]
+        known = {}
+        for i, f in enumerate(frames[:-1]):
+            alive = [s for s in f["Snakes"] if not s.get("Death")]
+            mine = next((s for s in alive if s["Name"] == ME), None)
+            others = [s for s in alive if s["Name"] != ME]
+            if not mine or not others:
+                break
+            t, hd = f["Turn"], mine["Body"][0]
+            if t < 30 and len(alive) >= min(3, len(g["snakes"])):
+                cdist.append(abs(hd["X"] - w // 2) + abs(hd["Y"] - h // 2))
+                edge += hd["X"] in (0, w - 1) or hd["Y"] in (0, h - 1)
+            if t in (30, 60, 100):
+                lens[t].append(len(mine["Body"]))
+                leads[t].append(len(mine["Body"]) - max(len(s["Body"]) for s in others))
+            dist = lambda s, c: abs(s["Body"][0]["X"] - c[0]) + abs(s["Body"][0]["Y"] - c[1])
+            food = {(c["X"], c["Y"]) for c in f["Food"]}
+            for c in food:
+                if c not in known:
+                    known[c] = (t, dist(mine, c), min(dist(s, c) for s in others))
+            gone = food - {(c["X"], c["Y"]) for c in frames[i + 1]["Food"]}
+            for c in gone:
+                t0, dm, do = known.pop(c)
+                eater = next((s["Name"] for s in frames[i + 1]["Snakes"] if not s.get("Death")
+                              and (s["Body"][0]["X"], s["Body"][0]["Y"]) == c), None)
+                if eater and 1 <= t0 <= 60:
+                    rel = "we closer" if dm < do else "they closer" if do < dm else "tie"
+                    race[rel, eater == ME] += 1
+    mean = lambda v: f"{sum(v) / len(v):.2f}" if v else "-"
+    if cdist:
+        print(f"   opening (turn < 30): centre distance {mean(cdist)}, on the edge {100 * edge / len(cdist):.1f} %")
+    if lens[30]:
+        print("   length at turn 30 / 60 / 100: " + " / ".join(mean(lens[t]) for t in (30, 60, 100))
+              + ", lead over the longest: " + " / ".join(mean(leads[t]) for t in (30, 60, 100)))
+    parts = []
+    for rel in ("we closer", "tie", "they closer"):
+        k, n = race[rel, True], race[rel, True] + race[rel, False]
+        if n:
+            parts.append(f"{rel} {100 * k / n:.0f} % ours ({k}/{n})")
+    if parts:
+        print("   food race (food of turn 1-60): " + ", ".join(parts))
+
+
 def main():
     p = argparse.ArgumentParser()
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -271,6 +340,8 @@ def main():
     s.add_argument("--until")
     s.add_argument("--mode")
     s.add_argument("-n", type=int, default=25)
+    s.add_argument("--opponents", help="only games against these snakes (comma separated)")
+    s.add_argument("--behaviour", action="store_true", help="also read the frames: opening, length, food race")
     s.set_defaults(f=cmd_report)
     a = p.parse_args()
     a.f(a)

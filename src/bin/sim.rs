@@ -555,6 +555,8 @@ struct Behaviour {
     open_turns: f64,
     centre: f64,
     edge: f64,
+    len30: f64,
+    n30: f64,
     len60: f64,
     n60: f64,
     len100: f64,
@@ -568,6 +570,8 @@ impl Behaviour {
         self.open_turns += o.open_turns;
         self.centre += o.centre;
         self.edge += o.edge;
+        self.len30 += o.len30;
+        self.n30 += o.n30;
         self.len60 += o.len60;
         self.n60 += o.n60;
         self.len100 += o.len100;
@@ -578,9 +582,10 @@ impl Behaviour {
 
     fn line(&self, name: &str) -> String {
         format!(
-            "{name}: centre<30 {:.2} edge<30 {:.1}% len60 {:.1} len100 {:.1} first out {:.1}%",
+            "{name}: centre<30 {:.2} edge<30 {:.1}% len30 {:.2} len60 {:.2} len100 {:.2} first out {:.1}%",
             self.centre / self.open_turns.max(1.0),
             100.0 * self.edge / self.open_turns.max(1.0),
+            self.len30 / self.n30.max(1.0),
             self.len60 / self.n60.max(1.0),
             self.len100 / self.n100.max(1.0),
             100.0 * self.first_out / self.games.max(1.0)
@@ -670,6 +675,10 @@ fn play(
                 b.open_turns += 1.0;
                 b.centre += ((x - 5).abs() + (y - 5).abs()) as f64;
                 b.edge += (x == 0 || y == 0 || x == 10 || y == 10) as u8 as f64;
+            }
+            if w.st.turn == 30 {
+                b.len30 += sn.len() as f64;
+                b.n30 += 1.0;
             }
             if w.st.turn == 60 {
                 b.len60 += sn.len() as f64;

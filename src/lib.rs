@@ -102,7 +102,7 @@ pub fn mode_of(st: &State) -> &'static str {
 /// {"weights": {"length": 20}, "focus": true, "duel": {"weights": {"area_open": 0.3}}}
 /// ```
 ///
-/// Keys: `weights` (partial [`Weights`]), `focus`, `focus_reach`, `smart`, `max_reach`,
+/// Keys: `weights` (partial [`Weights`]), `focus`, `focus_reach`, `focus_root`, `smart`, `max_reach`,
 /// `max_relevant`, `deep_ply`, `deep_reach`, `deep_min_opps`, `veto_frac`. The same keys inside
 /// a mode object ("duel", "standard", "royale", "constrictor") only apply in that mode.
 pub fn apply_variant(cfg: &mut SearchConfig, st: &State, v: &serde_json::Value) {
@@ -128,6 +128,9 @@ fn apply_keys(cfg: &mut SearchConfig, v: &serde_json::Value) {
     }
     if let Some(x) = int("focus_reach") {
         cfg.focus_reach = x as i32;
+    }
+    if let Some(x) = int("focus_root") {
+        cfg.focus_root = x as i32;
     }
     if let Some(x) = flag("smart") {
         cfg.smart_default = x;

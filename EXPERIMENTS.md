@@ -28,6 +28,7 @@ Vorhersage. Commits im Abstand von wenigen Stunden lassen sich in der Arena nich
 | 11-11 15:40 | Messung, kein Deploy | 55,8 (#15, 906) | 42,4 (#8, 893) | – | – | seit `7536b4c`: Duell 108–120 (47 %), Top 5 10–57, Standard 30 % Siege, 32 % Letzter; Spitze Duell 52,3, Standard 64,5 |
 | 11-11 19:00 | Basis vor Fokus-Suche | 56,1 (#14, 919) | 42,8 (#8, 908) | – | – | Standard seit `7536b4c`: 32 % Letzter, Rand 38 %, Länge bei Zug 100: 8,6; Tode im Timeout-Zug 11-08 bis 11-11: 33 in 1568 Partien |
 | 11-11 19:10 | Runde 8 deployt (Push, Build einige Minuten später) | – | – | – | – | Timeout-Regel (alle Modi), Standard: Fokus-Suche + `smart`. Auswerten mit `report --since '2026-11-11 19:30'` |
+| 11-12 14:45 | Messung, kein Deploy | 56,4 (#15, 1001) | 43,0 (#8, 990) | – | – | seit Runde 8 (19 h): 78 Standard, 79 Duelle, siehe Runde 10. Podium Standard 62,9, Duell 49,0 |
 
 Die globale Rangliste summiert die beste Wertung pro Leaderboard (fehlendes Board = 0).
 
@@ -97,6 +98,177 @@ in [CLAUDE.md](CLAUDE.md). Hier nur die Zahlen, die man dafür braucht:
 
 Elo-Werte sind aus Self-Play, Variante (A) gegen die Basis (B). ✅ übernommen, ❌ verworfen,
 ➖ neutral bzw. nicht übernommen.
+
+### Runde 10 (2026-11-12): Auswertung von Runde 8, Futter-Rennen im Duell, weniger Paranoia in Standard
+
+Datenbasis: 4283 Partien in `data/` (der Sync hat auch die älteren eigenen Partien nachgeladen). Neu im Werkzeug:
+`tools/arena.py report --behaviour` (Platzverteilung, Eröffnung, Länge, Futter-Rennen) und `--opponents`, die Sim druckt
+die Länge bei Zug 30, Variante `focus_root`. Nichts deployt, alle neuen Schalter sind aus.
+
+**Arena seit dem Deploy vom 11-11 19:10 UTC** (bis 11-12 14:25 UTC, 19 Stunden). Das sind erst 78 Standard-Partien
+und 79 Duelle, die Intervalle sind entsprechend breit (95 %):
+
+| | vorher (11-09 10:20 bis 11-11 19:00) | seit Runde 8 |
+|---|---|---|
+| Standard: Partien | 240 | 78 |
+| Standard: Siege | 30,8 % ±5,8 | 32,1 % ±10,4 |
+| Standard: Letzter | 30,8 % ±5,8 | 32,1 % ±10,4 |
+| Standard: mittlere Platzierung | 2,56 ±0,15 | 2,50 ±0,28 |
+| Standard: Abstand zur Mitte, Zug < 30 | 6,27 | **4,99** |
+| Standard: Rand, Zug < 30 | 38,0 % | **19,9 %** |
+| Standard: Länge bei Zug 60 / 100 | 6,76 / 8,83 | 7,25 / 9,51 |
+| Standard: Rückstand auf den Längsten bei Zug 100 | −2,95 | −2,98 |
+| Duell: Siege | 48,2 % (118 von 245) | 48,1 % (38 von 79) |
+| Duell gegen die Top 5 | 10–57 (15 %) bis 11-11 15:35 | 5–25 bei einem Remis (16 %) |
+| Tode im Timeout-Zug, Duell + Standard | 17 in 485 Partien (3,5 %) | 2 in 157 (1,3 %) |
+| Latenz im Duell p50 / p90 / p99 | 381 / 382 / 387 ms | 381 / 441 / 444 ms |
+
+- **Fokus-Suche: Das Verhalten hat sich wie geplant verschoben, das Ergebnis noch nicht.** Mitte und Rand liegen jetzt
+  am Rand des Bereichs der Spitze (4,1–4,7 und 13–20 %), die Länge bei Zug 100 stieg um 0,7. Der Anteil „Letzter“ ist
+  unverändert, bei 78 Partien wäre aber erst ein Rückgang auf etwa 20 % sichtbar. Kein Grund zum Zurückdrehen, weiter
+  sammeln (Ziel 100+ Partien, also bis 11-12 abends).
+- **Timeout-Regel: Tendenz richtig, nicht belegt.** Erwartet wären nach der alten Rate 5,5 Tode im Timeout-Zug, es
+  waren 2 (p ≈ 0,09). Die Regel antwortet wie vorgesehen in vielen Zügen 60 ms später (p90 441 ms), Timeouts gab es
+  weiter in 18 von 79 Duellen.
+- Wo wir in Standard zuerst ausscheiden (25 Partien): 22-mal mindestens 3 kürzer als der Längste, 20-mal höchstens ein
+  Feld von der Wand, 11-mal Kopf-an-Kopf gegen einen Längeren, 3-mal verhungert mit Länge 5–6. Das alte Muster.
+- Futter in Standard, alle Snakes mit ≥ 40 Partien im Datensatz: Wir fressen bis Zug 50 7,1-mal pro 100 Züge (vor
+  Runde 8: 6,5), die Spitze 8,2–10,0 (Oberon Orange 10,0, AlphaSlinky 9,4, rattler 8,6, NMC² 8,2). Längster im Feld
+  sind wir in 31 % der Züge, rattler, NMC², AlphaSlinky und Oberon Orange in 40–50 %.
+
+**Standard: Worin unterscheiden sich die Züge der Spitze von unseren?** Stellungstest (258 Partien, in denen eine
+Top-8-Snake gewinnt, 50 ms, ≥ 3 lebende Schlangen, n = 7513, Basis = Produktion 63,2 %, zwei Basis-Läufe unterscheiden
+sich um 0,1 Punkte, zwei Läufe derselben Variante bis z ≈ 1,5). In den 2764 abweichenden Stellungen liegt der Score
+unseres Zugs im Median nur 4–5 Punkte über dem Zug der Spitze. Die Züge der Spitze führen in der Eröffnung (Zug < 30,
+487 Abweichungen) doppelt so oft näher ans Futter (182 gegen 91), zur Mitte (176 gegen 85) und an den nächsten
+gegnerischen Kopf (178 gegen 74) wie unsere; die Nähe zu gegnerischen Köpfen bleibt über die ganze Partie (ab Zug 100:
+455 gegen 266). Felder neben gleich langen oder längeren Köpfen betritt auch die Spitze fast nie (0,1–0,9 %): Der
+Unterschied ist Zurückhaltung auf Abstand, kein Risiko im Nahkampf.
+
+| Variante (Standard) | gesamt | z | Zug < 30 | 4 lebend | 3 lebend | Fehlgriffe |
+|---|---|---|---|---|---|---|
+| Basis (Produktion, `focus_reach` 2) | 63,2 % | | 60,5 % | 62,9 % | 63,6 % | 1,6 % |
+| `food_dist` 3 / 5 | 63,0 / 62,5 % | −0,6 / −1,6 | 60,5 / 60,7 % | | | 1,8 / 2,2 % |
+| `hunger_health` 60, `want_length_lead` 8, `eat_early` 16, `length` 40, `food_contest` 1 | 63,1–63,3 % | −0,4 bis +0,5 | 60,9–61,3 % | | | 1,6–2,5 % |
+| `center` 1 / 2 / 4 | 63,5 / 63,5 / 62,8 % | +1,1 / +0,8 / −1,0 | 61,5 / 61,4 / 60,9 % | | | 1,7–2,0 % |
+| `opp_area_sum` 0.4 / 0.8, `opp_area` 1.0, `area_ratio` 1, `mutual` −400 | 62,4–63,4 % | −2,3 bis +0,9 | | | | 1,8–2,2 % |
+| **`focus_reach` 1** (zwei Läufe) | **65,3 / 65,1 %** | **+4,6 / +3,9** | **65,9 / 66,0 %** | 65,7 % | 65,0 % | 1,5 / 1,7 % |
+| `focus_reach` 0 | 65,2 % | +4,3 | 65,5 % | 65,4 % | 65,0 % | 1,6 % |
+| `focus_reach` 3 | 63,1 % | −1,1 | 60,5 % | | | 1,6 % |
+| `focus_reach` 1 + `focus_root` 2 / 4 (erste Ebene nicht mehr voll paranoid) | 63,6 / 63,7 % | +0,8 / +0,9 | 65,2 / 64,7 % | 63,0 / 63,2 % | | 2,0 / 1,8 % |
+| `focus_reach` 1 ohne `smart` | 64,1 % | +1,7 | 66,6 % | 64,4 % | 63,8 % | 1,5 % |
+| `focus_reach` 1 + `center` 1 | 65,4 % | +4,5 | 65,2 % | | | 1,6 % |
+| `focus_reach` 1 + `area_open` 0 (Gesamtlänge 12–40) | 65,6 % | +4,9 | 66,5 % | 66,4 % | 64,6 % | 1,4 % |
+| `focus_reach` 1 + `area_open` 0.5 (12–40) / 0.3 (12–32) | 65,5 / 65,4 % | +4,9 / +4,6 | 66,7 / 67,3 % | | | 1,4 / 1,6 % |
+
+- **Gewichte bewegen Standard weiterhin nicht**, auch nicht auf der Fokus-Basis: Futter, Länge, Mitte, Gegner-Gebiet
+  liegen alle innerhalb von ±1 Punkt.
+- ✅ **Kandidat `{"standard":{"focus_reach":1}}`**: In der Fokus-Suche wählen ab dem zweiten Halbzug nur noch der
+  Fokus-Gegner und Gegner direkt neben unserem Kopf frei. Bisher (Reichweite 2) durfte zusätzlich jeder Gegner in
+  Kopfabstand 2 frei gegen uns ziehen, also genau die, die im nächsten Zug ein Kopf-an-Kopf erzwingen können. Jeder
+  einzelne Gegner bleibt in seiner eigenen Teilsuche voll gefährlich, und der erste Halbzug bleibt voll paranoid.
+  Weggefallen ist nur die Verabredung zweier Nachbarn. Abstand 3 ändert nichts (Köpfe in ungeradem Abstand können nie
+  auf dasselbe Feld ziehen), Abstand 0 und 1 sind gleich.
+- Die erste Ebene zu lockern (`focus_root`) kostet den ganzen Gewinn ab Zug 30 und hebt die Fehlgriffe: bleibt bei 99.
+- `area_open` in Standard bringt auf `focus_reach` 1 gepaart nur +0,3 bis +0,5 Punkte (z ≈ 2, also am Rauschen), mit
+  0 und Fenster 12–40 dazu ab Zug 100 schlechter (z −2,0). ➖ Bleibt aus, `area_open` 0.5 (12–40) wäre der nächste Test.
+
+Self-Play Standard, `focus_reach` 1 (A) gegen Produktion (B), 40 ms, je 200 Partien:
+
+| Feld | A–B | Elo [95 %] | Mitte < 30 A / B | Rand < 30 A / B | Länge 100 A / B | zuerst raus A / B |
+|---|---|---|---|---|---|---|
+| 2 × Produktion | 89–111 | −38 [−88, +10] | 3,73 / 4,80 | 10,1 / 17,7 % | 10,9 / 11,1 | 26,0 / 24,0 % |
+| 2 × `focus_reach` 1 | 99–101 | −3 [−52, +45] | 4,16 / 5,20 | 12,7 / 20,8 % | 10,6 / 10,9 | 20,0 / 28,0 % |
+| keins (2 gegen 2) | 100–100 | ±0 [−48, +48] | 4,00 / 5,04 | 11,5 / 19,1 % | 10,7 / 10,7 | 23,5 / 27,2 % |
+
+Zusammen 288–312 (48,0 %, −14 Elo ±28): im Self-Play neutral, zuerst raus 23,2 gegen 26,4 %. Das ist dieselbe Lage wie
+bei `smart` in Runde 8: klarer Stellungstest, kein Nachweis gegen uns selbst. Die Produktion steht in der Sim bei
+Mitte 4,8–5,2 und Rand 18–21 %, also wie in der Arena (4,99 / 19,9 %); mit `focus_reach` 1 sind es 3,7–4,2 und
+10–13 %, etwas zentraler als die Spitze (4,1–4,7 / 13–20 %).
+
+**Duell: Wir verlieren das Futter-Rennen gegen die Spitze, und zwar am Rand.** Arena-Duelle seit 11-09 10:20:
+
+- Gegen die Top 5 und Shai-Hulud v5 (133 Duelle, 36 Siege) sind wir bei Zug 100 im Mittel 10,9 lang und 1,8 kürzer
+  als der Gegner. Der Rückstand entsteht zwischen Zug 6 und 30 (Vorsprung bei Zug 3 / 10 / 20 / 30 / 60: +0,3 / −0,3 /
+  −0,7 / −0,9 / −1,4), gegen alle anderen liegen wir vorn (+0,3 bei Zug 30, +1,2 bei Zug 60). Bis Zug 50 fressen fünf
+  der sechs 10,5–11,3-mal pro 100 Züge (NMC² 9,0-mal), wir 9,5-mal.
+- Jedes Futter, das in Zug 1–60 erscheint, nach der Lage beim Erscheinen (gegen diese sechs Gegner, 1380 Stück):
+
+  | beim Erscheinen | wir fressen es | Gegner frisst es |
+  |---|---|---|
+  | näher bei uns (611) | 76 % | 24 % |
+  | gleich weit (256) | 36 % | 64 % |
+  | näher beim Gegner (513) | 10 % | 90 % |
+
+  Die Lage ist also zu unseren Gunsten (wir stehen zentraler: 3,6 gegen 4,2), aber die Spitze holt sich ein Viertel
+  von „unserem“ Futter. Gegen den Rest des Feldes ist es umgekehrt (unseres 87 %, ihres holen wir zu 34 %).
+- **Der Unterschied ist Futter am Rand:** Liegt es näher bei uns und am Rand, fressen wir es zu 59 % (190 Stück),
+  sonst zu 83 %. Die Spitze frisst ihr Rand-Futter zu 89 %, ihr übriges zu 91 %. Ein Drittel allen Futters erscheint
+  am Rand. Verlorenes eigenes Futter lag im Mittel 20 Züge auf dem Brett.
+- Beispiel `fa0e7ed7` gegen Shai-Hulud v5: Zug 7–25 kreisen wir mit Länge 4 in der Mitte (Gebiet 88 gegen 33), Futter
+  auf (2,10) liegt 7 Felder von uns und 11 vom Gegner. Der Gegner wächst in der Zeit von 4 auf 8 und frisst es in Zug 26.
+- Ursache: Der Weg zum Rand kostet am Suchhorizont 40–70 Punkte Gebiet (Kopf am Rand, Gegner in der Mitte), ein
+  Futter bringt 25 + 8. Der Gebietsverlust ist aber nur vorübergehend, die Länge bleibt. Das passt zur Regression aus
+  Runde 8 (Gebiet sagt auf offenem Brett nichts voraus). `area_open` ist der Schalter dafür, in Runde 8 mit 0.3 zu
+  schwach dosiert und mit dem Fenster 30–55 zu lang.
+
+Duell-Varianten, Self-Play gegen die Produktion mit Futter-Rennen (Länge von A / B):
+
+| Variante | ms | Spiele | Elo [95 %] | Länge 30 | Länge 60 | Länge 100 |
+|---|---|---|---|---|---|---|
+| `area_open` 0.3 (Gesamtlänge 8–18) | 40 | 400 | +4 [−30, +39] | 6,82 / 6,62 | 9,69 / 9,39 | 13,4 / 12,9 |
+| **`area_open` 0 (8–24)** | 20 | 400 | +18 [−16, +53] | 6,92 / 6,52 | 9,90 / 9,18 | 13,4 / 12,7 |
+| **`area_open` 0 (8–24)**, neuer Seed | 40 | 800 | −2 [−26, +22] | 6,99 / 6,63 | 9,99 / 9,47 | 13,6 / 13,1 |
+| `area_open` 0.3 (8–18) + `food_dist` 3 + `food_contest` 1 | 20 | 400 | −11 [−46, +23] | 6,84 / 6,50 | 9,60 / 9,26 | 13,1 / 12,8 |
+| `food_dist` 3 + `food_contest` 1 | 20 | 400 | −15 [−49, +19] | 6,67 / 6,50 | 9,39 / 9,22 | 12,8 / 12,7 |
+| `length` 40 | 20 | 400 | −26 [−61, +8] | 6,82 / 6,50 | 9,77 / 9,22 | 13,6 / 12,6 |
+
+Stellungstest Duell (363 Duelle, in denen eine Top-7-Snake gewinnt, 50 ms, n = 20 952, Basis 64,6 %, gepaart):
+
+| Variante | gesamt | z | Zug < 30 | Zug 30–100 | Zug ≥ 100 | Fehlgriffe Zug < 30 |
+|---|---|---|---|---|---|---|
+| Basis (Produktion) | 64,6 % | | 70,9 % | 65,8 % | 63,5 % | 0,7 % |
+| **`area_open` 0 (8–24)** | 64,8 % | +1,1 | **74,6 % (z +3,3)** | 65,5 % (z −0,5) | 63,4 % (z −1,2) | 1,3 % |
+| `area_open` 0 (8–30) | 64,6 % | −0,2 | 74,8 % (z +3,5) | 65,4 % | 63,1 % (z −3,6) | 1,5 % |
+| `area_open` 0 (8–36) | 64,5 % | −0,2 | 75,0 % (z +3,7) | 64,5 % (z −1,7) | 63,3 % (z −1,4) | 1,4 % |
+
+Gegenprobe auf den Arena-Stellungen selbst (`tools/approach.py`, neu): alle Stellungen der sechs
+Züge nach dem Erscheinen eines Futters, das näher bei uns liegt (133 Duelle gegen die sechs Gegner, 50 ms). Anteil der
+Züge, die den Abstand zum Futter verkürzen: Rand-Futter 59,7 % → **71,2 %** (n = 1027), übriges 74,9 % → **82,8 %**
+(n = 1900). Nur auf den 36 Duellen seit Runde 8: 57,9 % → 71,2 % und 73,5 % → 84,1 %.
+
+Sparring gegen snork (`Flood`, 160 ms auf 4 Threads gegen unsere 40 ms, je 80 Duelle, 4 gleichzeitig, Seed 51):
+
+| A | A–snork | Elo [95 %] | Länge 30 A / snork | Länge 60 | Länge 100 |
+|---|---|---|---|---|---|
+| Produktion | 58–22 | +168 [+90, +267] | 6,71 / 6,47 | 9,82 / 9,04 | 13,6 / 12,5 |
+| `area_open` 0 (8–24) | 53–27 | +117 [+41, +206] | 7,10 / 6,40 | 10,21 / 9,28 | 13,8 / 12,8 |
+
+Der Unterschied der beiden Läufe ist nicht belegt (z ≈ −0,9), die Variante gewinnt auch hier mehr Futter (Vorsprung
+bei Zug 30: +0,70 statt +0,24). **snork ist kein Gegner auf Augenhöhe mehr:** Die Grundlinie aus Runde 9 war 33–31
+in 64 Duellen, heute 58–22 (16 Timeouts von snork in 80 Duellen). Woher der Sprung kommt, ist offen (die schnellere
+Gebietsberechnung allein erklärt ihn nicht). Sparring taugt damit nur als Kontrolle gegen Rückschritte, und nur mit
+einem Basis-Lauf in derselben Sitzung.
+
+- ✅ **Kandidat `{"duel":{"weights":{"area_open":0,"crowd_lo":8,"crowd_hi":24}}}`**: Gebiet zählt bei Gesamtlänge 8
+  gar nicht und ab 24 voll (zwei Schlangen mit je 12, etwa Zug 100). Gewinnt das Futter-Rennen (+0,4 Länge bei Zug 30,
+  +0,5 bis +0,7 bei Zug 60), passt in der Eröffnung besser zu den Zügen der Spitze (+3,7 Punkte) und geht auf den
+  Arena-Stellungen häufiger auf das eigene Futter zu. Im Self-Play neutral (zwei Läufe, 1200 Spiele) und gegen snork
+  nicht besser: Ein Gewinn in Partien ist offline nirgends belegt, nur das Verhalten, das der Spitze fehlt. Das
+  Urteil fällt in der Arena.
+- ❌ Breitere Fenster (8–30, 8–36) schaden ab Zug 30 bzw. 100. Futter-Gewichte allein gewinnen kaum Länge und
+  verlieren leicht, `length` 40 frisst auch spät zu viel.
+- Arena-Metrik für den Kandidaten: `report --behaviour --opponents <Top 5>` im Duell, Zeile „food race“ (heute: näher
+  bei uns 75 %, gleich weit 37 %) und der Längenrückstand bei Zug 30 / 60 (−0,9 / −1,4).
+
+**Tempo: Gebietsberechnung.** Im späten Duell (Längen 30–40) kostet die Bewertung dreimal so viel wie früh (1150 gegen
+350 ns), fast alles davon ist die Voronoi-Schleife: im Mittel 34 Schritte pro Aufruf, die Hälfte für nur 1–2 frei
+werdende Felder. ✅ Umgebaut (kein Schalter, gleiche Werte): Die Nachbarschaft jedes Gebiets wird mitgeführt statt in
+jedem Schritt neu berechnet, Schritte ohne erreichbares freies Feld werden übersprungen, einzelne Schlangen einer Länge
+gehen ohne Gleichstands-Prüfung. Bewertung auf fünf Stellungen einer Arena-Partie (Zug 20 / 100 / 250 / 400 / 470):
+348 → 278, 451 → 347, 839 → 606, 1152 → 810, 1208 → 960 ns, Knoten/s in der Suche +8 bis +16 %. Auf 393 436
+Arena-Stellungen (Schlangen bis Länge 77) identisch mit der alten Fassung (`voronoi_bb_ref`, Test
+`arena_positions`, `--ignored`) und in einem Zufallstest, der immer läuft. Nicht in Elo gemessen.
 
 ### Runde 9 (2026-11-11 abends): fremde Snakes als Sparringspartner
 
@@ -646,35 +818,36 @@ Die Zeilen ab `food_contest`-Gradient bis zur logistischen Regression liefen noc
 
 ## Offene Ideen / nächste Schritte
 
-Stand 2026-11-11, nach erwartetem Nutzen sortiert. Ältere Listen stehen in den Runden oben.
+Stand 2026-11-12, nach erwartetem Nutzen sortiert. Ältere Listen stehen in den Runden oben.
 
-1. **Deploy vom 11-11 19:10 UTC auswerten** (frühestens 11-12 abends, etwa 100 Duelle und 100 Standard-Partien):
-   `tools/arena.py report --since '2026-11-11 19:30'`. Erwartung in Standard: Anteil „Letzter“ unter 25 % (vorher
-   32 %), Länge bei Zug 100 über 10 (8,6), Rand in Zug < 30 unter 20 % (38 %), mittlere Platzierung unter 2,45 (2,59).
-   Erwartung für die Timeout-Regel: Tode im Timeout-Zug etwa halbiert (vorher 2,1 % der Partien), am Tag getrennt
-   von der Nacht ansehen. Im Duell ändert sich sonst nichts, die Siegquote dort ist die Kontrolle (47 %).
-   Fällt Standard schlechter aus: `focus`/`smart_default` in `config_for` wieder aus, die Timeout-Regel bleibt.
-2. **Varianten-Snake anlegen** (`/v/dev`, siehe CLAUDE.md). Damit laufen Arena-Tests parallel zur Produktion, und
-   jede weitere Idee braucht keinen Tag Wartezeit mehr. Das ist der größte Hebel für das Tempo der Entwicklung.
-3. **Bewertungsideen aus snork gegen snork testen** (Runde 9): Längen-Abklingen mit kurzer Halbwertszeit
-   (`length_half` 25–50 statt 150), Gebiet als Anteil hoch drei statt als Differenz (neuer Schalter in `eval.rs`),
-   Gebiet nach Gesundheit gewichtet. Messen mit `tools/opponents.sh spar duel 200 '{}' '<variante>'`, dazu wie immer
-   Stellungstest und Self-Play. Vorher Sandworm bauen (`tools/opponents.sh build`) und als zweiten Gegner einmessen.
-4. **Duell gegen die Top 5 (15 % Siege) ist offen.** Bisherige Befunde: Die Niederlagen sind strategisch (Runde 8,
-   Fehlersammlung), Gebiets- und Längengewichte nach Brettfüllung helfen nicht (Stellungstest). Nächste Ansätze:
-   - Gewichte am Stellungstest ausrichten: Ein-Gewicht-Reihe steht in Runde 8, die besten Richtungen kombinieren
-     und im Self-Play und Gegnerpool gegenprüfen.
-   - Taschen erkennen: In `0171730d` (Zug 204–216) bauen wir uns mit dem eigenen Körper eine Tasche mit einem Ausgang,
-     der Gegner schließt ihn 9 Züge später. Idee: Gebiet an Engstellen zerlegen (Kammerbaum), nur zählen, was durch
-     einen Ausgang erreichbar bleibt, den der Gegner nicht vor uns erreicht.
-   - Prüfen, ob mehr Tiefe diese Stellungen löst: `trace` mit 100 ms gegen 2000 ms auf denselben Zügen. Wenn ja,
-     lohnt Punkt 5.
-5. **Tempo.** Die Blätter kosten etwa 600 ns, davon Voronoi 350–400. Die Voronoi-Schleife läuft mindestens so viele
-   Runden wie die längste Schlange lang ist, auch wenn längst alles verteilt ist: früher abbrechen, wenn kein
-   blockiertes Feld mehr an ein Gebiet grenzt. Dazu `safe_moves` über eine Belegungs-Bitmaske statt über alle
-   Körperfelder. Erwartung aus Runde 6: Verdopplung bringt im Duell +0,7 Züge Tiefe, in Standard +0,3.
-6. **Fokus-Suche verfeinern:** `focus_reach` 1/3, Heuristik-Zug der übrigen Gegner (`smart` an der Vorhersagequote in
-   `policy` weiter tunen), Fokus auch im Royale testen.
-7. **Royale:** 84 von 152 Toden durch Hazard, 34 durch Hunger (seit 11-09). Bewertungsterm für die Rückkehr aus dem
-   Hazard (Runde 5), nachrangig.
-8. **Constrictor:** Messung im Self-Play reparieren (Runde 6), nachrangig.
+1. **Runde 8 fertig auswerten** (ab 11-12 abends, dann 100+ Partien je Board):
+   `tools/arena.py report --since '2026-11-11 19:30' --behaviour`. Zwischenstand in Runde 10: Verhalten in Standard
+   wie geplant, Ergebnis noch im Rauschen.
+2. **Die zwei Kandidaten aus Runde 10 in die Arena bringen** (beide aus, beide im Self-Play neutral, beide mit klarem
+   Stellungstest). Sie betreffen verschiedene Ranglisten und lassen sich deshalb zusammen deployen und getrennt
+   auswerten:
+   - Duell: `{"duel":{"weights":{"area_open":0,"crowd_lo":8,"crowd_hi":24}}}`. Einschalten im Duell-Zweig von
+     `profile()`. Arena-Metrik: Futter-Rennen und Längenrückstand bei Zug 30 / 60 gegen die Top 5
+     (`report --behaviour --opponents ...`), Siegquote gegen die Top 5 (heute 16 %).
+   - Standard: `{"standard":{"focus_reach":1}}`. Einschalten in `config_for()`. Arena-Metrik: Anteil „Letzter“
+     (heute 32 %), Mitte und Rand in der Eröffnung (4,99 / 19,9 %, Erwartung etwa 4,3 / 14 %).
+   Mit der Varianten-Snake (`/v/dev`) ginge beides parallel zur Produktion und ohne Wartezeit.
+3. **Duell nach der Eröffnung.** Gegen die Top 5 bleiben wir auch mit gewonnenem Futter-Rennen voraussichtlich hinten.
+   Nächste Ansätze, in dieser Reihenfolge:
+   - Futter bei Gleichstand: Gleich weit entferntes Futter geht zu 64 % an die Spitze (sind wir kürzer: 81 %). Prüfen,
+     wie die Spitze das spielt (blockieren, zuerst das eigene fressen, Kopf-an-Kopf androhen).
+   - Taschen erkennen (Kammerbaum), siehe Runde 8: Niederlagen im Endspiel durch `self-collision`, seit Runde 8
+     meist mit Längenrückstand von 2–5 statt mit Vorsprung.
+   - Bewertungsideen aus snork (Runde 9): Gebiet als Anteil hoch drei, Gebiet nach Gesundheit gewichtet.
+4. **Standard: Futter.** Wir fressen bis Zug 50 7,1-mal pro 100 Züge, die Spitze 8,2–10,0. Gewichte ändern daran im
+   Stellungstest nichts (Runde 10). Nächster Test: `area_open` 0.5 (Gesamtlänge 12–40) auf `focus_reach` 1 im
+   Feld-Self-Play, dazu `tools/approach.py` auf Standard erweitern.
+5. **Tempo.** Die Gebietsberechnung ist im späten Duell jetzt 20–30 % schneller (Runde 10), kostet dort aber immer
+   noch dreimal so viel wie früh: 34 Schritte pro Aufruf, einer pro Körpersegment. Idee: Schleife nach etwa 16
+   Schritten abbrechen und die restlichen Körperfelder dem Nachbargebiet zuschlagen (ändert die Werte, braucht also
+   Schalter und Messung). Dazu `safe_moves` über eine Belegungs-Bitmaske statt über alle Körperfelder.
+6. **Timeouts.** Weiter in etwa jedem fünften Duell, tagsüber doppelt so oft wie nachts (Runde 8). Die Regel aus
+   Runde 8 senkt die Tode, nicht die Timeouts. Offen: Was läuft tagsüber noch auf dem Host?
+7. **Fokus-Suche verfeinern:** Heuristik-Zug der übrigen Gegner (`smart` an der Vorhersagequote in `policy` weiter
+   tunen), Fokus auch im Royale testen (dort Mitte 6,1 und Rand 35 %, wie Standard vor Runde 8).
+8. **Royale** (Hazard-Rückkehr, Runde 5) und **Constrictor** (Messung reparieren, Runde 6): nachrangig.

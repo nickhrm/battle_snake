@@ -45,6 +45,9 @@ pub struct SearchConfig {
     pub focus: bool,
     /// focus search: opponents whose head is within this distance of ours always choose freely
     pub focus_reach: i32,
+    /// focus search: at the first ply only the focus opponent and the opponents whose head is
+    /// within this distance of ours choose freely (99 = the first ply stays fully paranoid)
+    pub focus_root: i32,
     /// The move the engine plays for us when our answer is late (it repeats our last move).
     /// With it the search answers `early` sooner while a timeout would be costly, and takes
     /// up to `late` longer while the timeout move is its own choice anyway.
@@ -71,6 +74,7 @@ impl Default for SearchConfig {
             smart_default: false,
             focus: false,
             focus_reach: 2,
+            focus_root: 99,
             fallback: None,
             early: Duration::ZERO,
             late: Duration::ZERO,
@@ -111,6 +115,7 @@ struct Ctx<'a> {
     /// focus search: index of the opponent that chooses freely at every ply
     focus: Option<usize>,
     focus_reach: i32,
+    focus_root: i32,
     killer_me: [u8; MAX_PLY],
     killer_opp: [u32; MAX_PLY],
     /// best exact root score found so far by any thread (f32 bits), parallel root only
@@ -146,6 +151,7 @@ impl<'a> Ctx<'a> {
             smart_default: false,
             focus: None,
             focus_reach: 2,
+            focus_root: 99,
             killer_me: [255; MAX_PLY],
             killer_opp: [u32::MAX; MAX_PLY],
             shared_alpha: None,
@@ -296,6 +302,7 @@ impl<'a> Ctx<'a> {
             let full = match self.focus {
                 // the first ply stays fully paranoid: any opponent may take a head-to-head now
                 Some(f) if ply > 0 => j == f || d <= self.focus_reach,
+                Some(f) if self.focus_root < 99 => j == f || d <= self.focus_root,
                 _ => (d <= reach || self.start_opps == 1) && rank < self.max_relevant,
             };
             if full {
@@ -691,6 +698,7 @@ fn search_focus(st: &State, cfg: &SearchConfig, deadline: Instant, root: &[Dir])
             c.smart_default = cfg.smart_default;
             c.focus = Some(opps[t % k]);
             c.focus_reach = cfg.focus_reach;
+            c.focus_root = cfg.focus_root;
             if cfg.parallel {
                 c.shared_alpha = Some(&shared);
             }
@@ -1096,10 +1104,11 @@ mod tests {
             ],
             vec![],
         );
-        for parallel in [false, true] {
+        for (parallel, focus_reach) in [(false, 2), (true, 2), (false, 1), (true, 0)] {
             let cfg = SearchConfig {
                 parallel,
                 focus: true,
+                focus_reach,
                 ..Default::default()
             };
             let r = search(&st, &cfg, Instant::now() + Duration::from_millis(60));
