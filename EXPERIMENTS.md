@@ -30,7 +30,7 @@ Vorhersage. Commits im Abstand von wenigen Stunden lassen sich in der Arena nich
 | 11-11 19:10 | Runde 8 deployt (Push, Build einige Minuten später) | – | – | – | – | Timeout-Regel (alle Modi), Standard: Fokus-Suche + `smart`. Auswerten mit `report --since '2026-11-11 19:30'` |
 | 11-12 14:45 | Messung, kein Deploy | 56,4 (#15, 1001) | 43,0 (#8, 990) | – | – | seit Runde 8 (19 h): 78 Standard, 79 Duelle, siehe Runde 10. Podium Standard 62,9, Duell 49,0 |
 | 11-12 18:40 | Endstand Runde 8, Basis vor Runde 10 | 56,7 (#13, 1020) | 42,9 (#8, 1006) | – | – | seit Runde 8 (23 h): Standard 98 Partien, 33,7 % Siege, 30,6 % Letzter, Platz 2,45, Rand 20,6 %, Länge bei Zug 100: 9,52; Duell 96 Partien, 47,9 %, Top 5 6–31 (37). Tode im Timeout-Zug: 3 in 194. Podium Standard 62,7, Duell 49,1 |
-| 11-12 18:55 | Runde 10 deployt (Push, Nutzer hat ausdrücklich vor Ablauf des Tages freigegeben) | – | – | – | – | Duell: `area_open` 0, Fenster 8–24. Standard: `focus_reach` 1. Alle Modi: schnellere Gebietsberechnung. Auswerten mit `report --since '2026-11-12 19:15' --behaviour` |
+| 11-12 18:46 | Runde 10 deployt (Push, Nutzer hat ausdrücklich vor Ablauf des Tages freigegeben) | – | – | – | – | Duell: `area_open` 0, Fenster 8–24. Standard: `focus_reach` 1. Alle Modi: schnellere Gebietsberechnung. Auswerten mit `report --since '2026-11-12 19:15' --behaviour` |
 
 Die globale Rangliste summiert die beste Wertung pro Leaderboard (fehlendes Board = 0).
 
@@ -819,7 +819,7 @@ Die Zeilen ab `food_contest`-Gradient bis zur logistischen Regression liefen noc
 - `clone` + `advance` etwa 380 ns, davon `clone` etwa 90 ns
 - Die Blätter dominieren: Pro Blatt fallen etwa 1 µs an.
 
-**Deploy (11-12 18:55 UTC).** Der Nutzer hat beide Kandidaten freigegeben, etwa eine Stunde vor Ablauf des Tages seit
+**Deploy (11-12 18:46 UTC).** Der Nutzer hat beide Kandidaten freigegeben, etwa eine Stunde vor Ablauf des Tages seit
 Runde 8. Eingeschaltet im Duell-Zweig von `profile()` (`area_open` 0, `crowd_lo` 8, `crowd_hi` 24) und in
 `config_for()` (`focus_reach` 1 in Standard). Endstand von Runde 8 als Basis (11-11 19:30 bis 11-12 18:40 UTC):
 
@@ -845,7 +845,7 @@ Spiele für eine Aussage).
 
 Stand 2026-11-12, nach erwartetem Nutzen sortiert. Ältere Listen stehen in den Runden oben.
 
-1. **Runde 10 auswerten** (deployt 11-12 18:55 UTC, frühestens 11-13 abends, 100+ Partien je Board):
+1. **Runde 10 auswerten** (deployt 11-12 18:46 UTC, frühestens 11-13 abends, 100+ Partien je Board):
    `tools/arena.py report --since '2026-11-12 19:15' --behaviour`, für das Duell dazu
    `--opponents 'Odiodin,Bwukinator,NMC²,rattler,AlphaSlinky'`. Basis und Erwartung stehen in der Tabelle „Deploy“ am
    Ende von Runde 10. Beide Änderungen betreffen verschiedene Ranglisten und lassen sich getrennt auswerten.
