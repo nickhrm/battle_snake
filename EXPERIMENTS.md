@@ -29,6 +29,8 @@ Vorhersage. Commits im Abstand von wenigen Stunden lassen sich in der Arena nich
 | 11-11 19:00 | Basis vor Fokus-Suche | 56,1 (#14, 919) | 42,8 (#8, 908) | – | – | Standard seit `7536b4c`: 32 % Letzter, Rand 38 %, Länge bei Zug 100: 8,6; Tode im Timeout-Zug 11-08 bis 11-11: 33 in 1568 Partien |
 | 11-11 19:10 | Runde 8 deployt (Push, Build einige Minuten später) | – | – | – | – | Timeout-Regel (alle Modi), Standard: Fokus-Suche + `smart`. Auswerten mit `report --since '2026-11-11 19:30'` |
 | 11-12 14:45 | Messung, kein Deploy | 56,4 (#15, 1001) | 43,0 (#8, 990) | – | – | seit Runde 8 (19 h): 78 Standard, 79 Duelle, siehe Runde 10. Podium Standard 62,9, Duell 49,0 |
+| 11-12 18:40 | Endstand Runde 8, Basis vor Runde 10 | 56,7 (#13, 1020) | 42,9 (#8, 1006) | – | – | seit Runde 8 (23 h): Standard 98 Partien, 33,7 % Siege, 30,6 % Letzter, Platz 2,45, Rand 20,6 %, Länge bei Zug 100: 9,52; Duell 96 Partien, 47,9 %, Top 5 6–31 (37). Tode im Timeout-Zug: 3 in 194. Podium Standard 62,7, Duell 49,1 |
+| 11-12 18:55 | Runde 10 deployt (Push, Nutzer hat ausdrücklich vor Ablauf des Tages freigegeben) | – | – | – | – | Duell: `area_open` 0, Fenster 8–24. Standard: `focus_reach` 1. Alle Modi: schnellere Gebietsberechnung. Auswerten mit `report --since '2026-11-12 19:15' --behaviour` |
 
 Die globale Rangliste summiert die beste Wertung pro Leaderboard (fehlendes Board = 0).
 
@@ -103,7 +105,8 @@ Elo-Werte sind aus Self-Play, Variante (A) gegen die Basis (B). ✅ übernommen,
 
 Datenbasis: 4283 Partien in `data/` (der Sync hat auch die älteren eigenen Partien nachgeladen). Neu im Werkzeug:
 `tools/arena.py report --behaviour` (Platzverteilung, Eröffnung, Länge, Futter-Rennen) und `--opponents`, die Sim druckt
-die Länge bei Zug 30, Variante `focus_root`. Nichts deployt, alle neuen Schalter sind aus.
+die Länge bei Zug 30, Variante `focus_root`. Die Messungen unten sind alle mit ausgeschalteten Schaltern gemacht,
+eingeschaltet und deployt wurde am Ende (siehe „Deploy“ am Schluss der Runde).
 
 **Arena seit dem Deploy vom 11-11 19:10 UTC** (bis 11-12 14:25 UTC, 19 Stunden). Das sind erst 78 Standard-Partien
 und 79 Duelle, die Intervalle sind entsprechend breit (95 %):
@@ -816,22 +819,39 @@ Die Zeilen ab `food_contest`-Gradient bis zur logistischen Regression liefen noc
 - `clone` + `advance` etwa 380 ns, davon `clone` etwa 90 ns
 - Die Blätter dominieren: Pro Blatt fallen etwa 1 µs an.
 
+**Deploy (11-12 18:55 UTC).** Der Nutzer hat beide Kandidaten freigegeben, etwa eine Stunde vor Ablauf des Tages seit
+Runde 8. Eingeschaltet im Duell-Zweig von `profile()` (`area_open` 0, `crowd_lo` 8, `crowd_hi` 24) und in
+`config_for()` (`focus_reach` 1 in Standard). Endstand von Runde 8 als Basis (11-11 19:30 bis 11-12 18:40 UTC):
+
+| | Runde 8 (Basis) | Erwartung Runde 10 |
+|---|---|---|
+| Standard: Partien | 98 | |
+| Standard: Siege / Letzter / mittlere Platzierung | 33,7 % / 30,6 % / 2,45 | Letzter sinkt |
+| Standard: Mitte / Rand in der Eröffnung | 5,07 / 20,6 % | etwa 4,3 / 14 % |
+| Standard: Länge bei Zug 30 / 60 / 100 | 5,44 / 7,23 / 9,52 | |
+| Duell: Partien, Siege | 96, 47,9 % | |
+| Duell gegen die Top 5: Partien, Siege | 37, 16,2 % | |
+| Duell gegen die Top 5: Rückstand bei Zug 30 / 60 / 100 | −0,95 / −1,58 / −2,50 | bei Zug 30 und 60 kleiner |
+| Duell gegen die Top 5: Futter näher bei uns, gefressen | 75 % (123/164) | über 80 % |
+| Duell gegen die Top 5: Futter gleich weit, gefressen | 37 % (25/67) | |
+| Tode im Timeout-Zug (Duell + Standard) | 3 in 194 | |
+
+Kontrolle nach dem Einschalten: `tools/approach.py 50 '{}'` auf den 49 Duellen seit Runde 8 gegen die Spitze: Rand
+74,8 % von 317, sonst 84,1 % von 534 (Variante vorher auf 36 Duellen: 71,2 % / 84,1 %). Das Produktiv-Profil spielt
+also wie die gemessene Variante. Kurzer Self-Play-Lauf ohne Absturz (40 Duelle, 30 Standard-Partien, 20 ms, zu wenige
+Spiele für eine Aussage).
+
 ## Offene Ideen / nächste Schritte
 
 Stand 2026-11-12, nach erwartetem Nutzen sortiert. Ältere Listen stehen in den Runden oben.
 
-1. **Runde 8 fertig auswerten** (ab 11-12 abends, dann 100+ Partien je Board):
-   `tools/arena.py report --since '2026-11-11 19:30' --behaviour`. Zwischenstand in Runde 10: Verhalten in Standard
-   wie geplant, Ergebnis noch im Rauschen.
-2. **Die zwei Kandidaten aus Runde 10 in die Arena bringen** (beide aus, beide im Self-Play neutral, beide mit klarem
-   Stellungstest). Sie betreffen verschiedene Ranglisten und lassen sich deshalb zusammen deployen und getrennt
-   auswerten:
-   - Duell: `{"duel":{"weights":{"area_open":0,"crowd_lo":8,"crowd_hi":24}}}`. Einschalten im Duell-Zweig von
-     `profile()`. Arena-Metrik: Futter-Rennen und Längenrückstand bei Zug 30 / 60 gegen die Top 5
-     (`report --behaviour --opponents ...`), Siegquote gegen die Top 5 (heute 16 %).
-   - Standard: `{"standard":{"focus_reach":1}}`. Einschalten in `config_for()`. Arena-Metrik: Anteil „Letzter“
-     (heute 32 %), Mitte und Rand in der Eröffnung (4,99 / 19,9 %, Erwartung etwa 4,3 / 14 %).
-   Mit der Varianten-Snake (`/v/dev`) ginge beides parallel zur Produktion und ohne Wartezeit.
+1. **Runde 10 auswerten** (deployt 11-12 18:55 UTC, frühestens 11-13 abends, 100+ Partien je Board):
+   `tools/arena.py report --since '2026-11-12 19:15' --behaviour`, für das Duell dazu
+   `--opponents 'Odiodin,Bwukinator,NMC²,rattler,AlphaSlinky'`. Basis und Erwartung stehen in der Tabelle „Deploy“ am
+   Ende von Runde 10. Beide Änderungen betreffen verschiedene Ranglisten und lassen sich getrennt auswerten.
+2. **Runde 8 ist ausgewertet** (98 Standard-Partien, 96 Duelle): Verhalten in Standard wie geplant (Rand 38 % → 21 %),
+   Siege 30,8 % → 33,7 % und Letzter 30,8 % → 30,6 % bleiben im Rauschen (±9 Punkte). Tode im Timeout-Zug 17 in 485
+   → 3 in 194.
 3. **Duell nach der Eröffnung.** Gegen die Top 5 bleiben wir auch mit gewonnenem Futter-Rennen voraussichtlich hinten.
    Nächste Ansätze, in dieser Reihenfolge:
    - Futter bei Gleichstand: Gleich weit entferntes Futter geht zu 64 % an die Spitze (sind wir kürzer: 81 %). Prüfen,

@@ -50,9 +50,18 @@ pub fn profile(st: &State) -> Weights {
         // duel: the value of length fades with the turn number (half-life 150 turns, at least
         // 30 %). A long body late in the game costs room, and the duels we lost late were
         // mostly lost with a big length lead.
+        //
+        // Territory does not count while the snakes are short (total length 8) and counts
+        // fully from total length 24. Against the top duel snakes we left food on the edge
+        // that was closer to us, because the way there costs territory at the horizon.
+        // Position test in the opening 70.9 % -> 74.6 % (z +3.3), self-play even
+        // (EXPERIMENTS.md, round 10).
         return Weights {
             length_half: 150.0,
             length_min: 0.3,
+            area_open: 0.0,
+            crowd_lo: 8.0,
+            crowd_hi: 24.0,
             ..w
         };
     }
@@ -72,13 +81,19 @@ pub fn config_for(st: &State, parallel: bool) -> SearchConfig {
     // of a coalition of all) with the heuristic move for the opponents that do not choose
     // freely. Position test 62.4 % -> 64.7 % (z +3.5), self-play about +50 Elo over seven runs
     // (EXPERIMENTS.md, round 8). Not measured in royale and constrictor: off there.
+    //
+    // focus_reach 1 in standard: besides the focus opponent only opponents whose head is next
+    // to ours choose freely, so we keep less distance to heads that cannot reach us. Position
+    // test 63.2 % -> 65.3 % (z +4.6), self-play even (EXPERIMENTS.md, round 10).
     let standard = mode_of(st) == "standard";
+    let d = SearchConfig::default();
     SearchConfig {
         weights: weights_for(st),
         parallel,
         focus: standard,
         smart_default: standard,
-        ..SearchConfig::default()
+        focus_reach: if standard { 1 } else { d.focus_reach },
+        ..d
     }
 }
 
