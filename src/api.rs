@@ -56,6 +56,9 @@ pub struct Game {
     pub map: String,
     pub timeout: u64,
     pub source: String,
+    /// Not part of the engine API: the number of snakes at the start of the game, filled in by
+    /// our server (which remembers it per game) and by the tools. 0 = unknown.
+    pub players: usize,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
@@ -137,6 +140,7 @@ impl GameState {
         let mut rules = Rules::new(w, h, self.is_wrapped(), self.is_constrictor(), dmg);
         // not shrinkEveryNTurns: our sim sends it in every mode, and the engine may do the same
         rules.royale = self.game.map == "royale" || !self.board.hazards.is_empty();
+        rules.players = self.game.players.min(255) as u8;
         let inb = |c: &Coord| c.x >= 0 && c.y >= 0 && c.x < w && c.y < h;
         for c in self.board.hazards.iter().filter(|c| inb(c)) {
             let i = rules.cell(c.x, c.y) as usize;

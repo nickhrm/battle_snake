@@ -9,7 +9,7 @@ mode=$1; games=$2; ms=$3
 variant=$(python3 -c '
 import json, sys
 v = json.loads(sys.argv[1])
-keys = {"weights", "focus", "focus_reach", "smart", "max_reach", "max_relevant", "deep_ply", "deep_reach",
+keys = {"weights", "focus", "focus_reach", "smart", "max_reach", "max_relevant", "deep_ply", "deep_reach", "duel_game",
         "deep_min_opps", "veto_frac", "duel", "standard", "royale", "constrictor"}
 print(json.dumps(v if not v or keys & set(v) else {"weights": v}))' "$4")
 bin=${5:-"$(dirname "$0")/../target/release/sim"}

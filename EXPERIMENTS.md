@@ -31,6 +31,8 @@ Vorhersage. Commits im Abstand von wenigen Stunden lassen sich in der Arena nich
 | 11-12 14:45 | Messung, kein Deploy | 56,4 (#15, 1001) | 43,0 (#8, 990) | – | – | seit Runde 8 (19 h): 78 Standard, 79 Duelle, siehe Runde 10. Podium Standard 62,9, Duell 49,0 |
 | 11-12 18:40 | Endstand Runde 8, Basis vor Runde 10 | 56,7 (#13, 1020) | 42,9 (#8, 1006) | – | – | seit Runde 8 (23 h): Standard 98 Partien, 33,7 % Siege, 30,6 % Letzter, Platz 2,45, Rand 20,6 %, Länge bei Zug 100: 9,52; Duell 96 Partien, 47,9 %, Top 5 6–31 (37). Tode im Timeout-Zug: 3 in 194. Podium Standard 62,7, Duell 49,1 |
 | 11-12 18:46 | Runde 10 deployt (Push, Nutzer hat ausdrücklich vor Ablauf des Tages freigegeben) | – | – | – | – | Duell: `area_open` 0, Fenster 8–24. Standard: `focus_reach` 1. Alle Modi: schnellere Gebietsberechnung. Auswerten mit `report --since '2026-11-12 19:15' --behaviour` |
+| 11-14 13:58 | Endstand Runde 10, Basis vor Runde 11 | 59,3 (#8, 1205) | 43,6 (#9, 1191) | – | – | seit Runde 10 (43 h): Duell 180 Partien, 51,7 %, Top 5 9–30 bei einem Remis (40), Natrix 6–20; Standard 181 Partien, 34,8 % Siege, 17,1 % Letzter, Platz 2,26. Tode im Timeout-Zug: 5 in 361. Podium Standard 63,3, Duell 49,7. Details in Runde 11 |
+| 11-14 17:19 | Runde 11 deployt (Push, vom Nutzer freigegeben) | – | – | – | – | Nur Duell-Partien: Appetit klingt von Zug 100 bis 200 ab, `length_min` 0.1. Standard unverändert. Auswerten mit `report --since '2026-11-14 17:49' --mode duel --behaviour` |
 
 Die globale Rangliste summiert die beste Wertung pro Leaderboard (fehlendes Board = 0).
 
@@ -100,6 +102,183 @@ in [CLAUDE.md](CLAUDE.md). Hier nur die Zahlen, die man dafür braucht:
 
 Elo-Werte sind aus Self-Play, Variante (A) gegen die Basis (B). ✅ übernommen, ❌ verworfen,
 ➖ neutral bzw. nicht übernommen.
+
+### Runde 11 (2026-11-14): Auswertung von Runde 10, Appetit im Duell
+
+Nur Duell (Auftrag des Nutzers: Standard steigt noch und bleibt unangetastet). Datenbasis: 5345 Partien in `data/`.
+Neu im Werkzeug: `tools/appetite.py`, `arena.py report --behaviour` mit der Zeile „appetite“ und der Länge bei Zug
+200 / 300, Variantenschlüssel `duel_game` (nur Partien, die als Duell begonnen haben). Alle Messungen mit
+ausgeschalteten Schaltern.
+
+**Arena seit dem Deploy vom 11-12 18:46 UTC** (bis 11-14 13:50 UTC, 43 Stunden):
+
+| | Runde 8 (11-11 19:30 bis 11-12 18:40) | seit Runde 10 |
+|---|---|---|
+| Duell: Partien, Siege | 96, 47,9 % | 180, **51,7 %** (±7,3) |
+| Duell gegen die Top 5: Partien, Siege | 37, 16,2 % | 40, 22,5 % (9 Siege, ein Remis) |
+| Duell gegen die Top 5: Vorsprung bei Zug 30 / 60 / 100 | −0,95 / −1,58 / −2,50 | **−0,07 / −0,10 / −0,90** |
+| Duell gegen die Top 5: Futter näher bei uns, gefressen | 75 % (123/164) | **87 %** (141/162) |
+| Duell gegen die Top 5: Futter gleich weit, gefressen | 37 % (25/67) | 47 % (37/78) |
+| Duell gegen die Top 5: Rand in der Eröffnung | 8,6 % | 14,0 % |
+| Duell: Tode im Timeout-Zug | | 1 in 180 |
+| Standard: Partien, Siege, Letzter, Platz | 98, 33,7 %, 30,6 %, 2,45 | 181, 34,8 %, **17,1 %**, **2,26** |
+| Standard: Mitte / Rand in der Eröffnung, Länge bei Zug 100 | 5,07 / 20,6 %, 9,52 | 3,90 / 13,0 %, 10,56 |
+| Wertung Duell / Standard | 42,9 (#8) / 56,7 (#13) | 43,6 (#9) / 59,3 (#8) |
+
+- ✅ **Runde 10 bleibt.** Das Futter-Rennen im Duell ist gewonnen (Erwartung „über 80 %“ erfüllt, der Rückstand bis
+  Zug 60 ist weg), die Siegquote stieg um 3,8 Punkte (im Rauschen). In Standard hat sich der Anteil „Letzter“ fast
+  halbiert (z ≈ −2,6), die Wertung stieg um 2,6. Standard wird weiter beobachtet, nichts daran geändert.
+- **Gegen die Spitze verlieren wir trotzdem.** Bwukinator 0–6, rattler 0–4, Odiodin 0–4, NMC² 3–7 bei einem Remis,
+  AlphaSlinky 6–9. Neu im Feld: Natrix Portia (#5, 74 % Siege) 1–11, Natrix Bianca (#7) 1–4, Natrix Neural
+  Tessellata 4–5. Gegen die drei Natrix liegen wir bei Zug 30 / 60 / 100 um 0,9 / 1,4 / 1,6 **vorn**, gewinnen 94 %
+  unseres Futters und verlieren 20 von 26, im Median bei Zug 443.
+
+**Wo die Duelle verloren gehen** (`trace` mit 25 ms über alle 180 Duelle, 83 Niederlagen):
+
+- 77 von 83 Niederlagen enden nach Zug 250 (Median 418). Nur 10 sind schon vor Zug 100 dauerhaft im Minus.
+- Gegen die Top 5, Natrix und Oberon Orange (58 Niederlagen, 21 Siege) liegt der letzte Zug mit Score ≥ −50 im
+  Median bei Zug 341, Gesamtlänge 52, mit +1,7 Länge für uns. In den Niederlagen haben wir bei Zug 300 im Mittel
+  2,5 Vorsprung.
+- 29 Niederlagen kippen erst in den letzten 25 Zügen, 23 davon mit mindestens 3 Länge Vorsprung (47 gegen 34, 43
+  gegen 30, 68 gegen 40). Beispiel `4f863f20` gegen Natrix Portia: Zug 448–456 liegt unser 47 Felder langer Körper
+  über die untere Bretthälfte, der Kopf folgt dem Schwanz des Gegners in dessen Gebiet, der Gegner dreht um und
+  schließt bei Zug 462.
+
+**Die Spitze frisst spät nur noch nebenbei, wir fressen weiter.** Duelle seit 11-09, alle Snakes mit ≥ 40 Partien:
+
+| Snake | Siege | Länge bei Zug 100 / 200 / 300 / 400 | Vorsprung bei Zug 100 / 300 |
+|---|---|---|---|
+| Natrix Portia | 65 % | 10,2 / 16,4 / 23,4 / 29,7 | −1,8 / −1,0 |
+| Natrix Bianca | 64 % | 10,5 / 16,7 / 23,2 / 29,5 | −0,3 / ±0,0 |
+| NMC² | 55 % | 10,9 / 17,3 / 24,0 / 30,4 | −1,2 / −0,4 |
+| Odiodin | 48 % | 13,0 / 18,0 / 23,2 / 28,7 | +1,0 / −2,7 |
+| Bwukinator | 39 % | 13,1 / 20,0 / 25,9 / 31,5 | +1,8 / +3,0 |
+| **honey_badger** (seit Runde 10) | 52 % | 12,5 / 20,1 / 28,2 / 35,6 | +2,0 / +6,2 |
+| rattler | 32 % | 12,8 / 20,6 / 29,2 / 37,0 | +2,8 / +9,9 |
+| Shai-Hulud v5 | 20 % | 13,7 / 22,8 / 30,8 / 37,1 | +3,8 / +10,5 |
+
+(Die Siegquote gilt für die Partien im Datensatz, also vor allem gegen die Top 8 und uns.) Die drei Snakes mit der
+besten Quote halten Gleichstand und sind bei Zug 300 fünf Felder kürzer als wir.
+
+Direkt gemessen (`tools/appetite.py snakes`): Wie oft nimmt eine Snake Futter, das neben ihrem Kopf liegt (Gesundheit
+≥ 50, nicht neben dem Kopf des Gegners)?
+
+| Snake | Zug < 100 | Zug 100–250 | Zug ≥ 250 |
+|---|---|---|---|
+| honey_badger (seit Runde 10) | 95 % | 87 % | **80 %** |
+| Natrix Portia / Bianca | 79 / 71 % | 54 / 49 % | 46 / 38 % |
+| NMC² | 84 % | 59 % | 34 % |
+| Odiodin | 100 % | 57 % | 41 % |
+| Bwukinator | 87 % | 56 % | 40 % |
+| rattler / AlphaSlinky / Shai-Hulud v5 | 91 / 92 / 92 % | 69 / 79 / 79 % | 53 / 59 / 69 % |
+
+Ein Wert von 35–50 % heißt „egal“ (einer von zwei bis drei sicheren Zügen). Die fünf oberen Snakes („die Sparsamen“)
+fressen bis Zug 100 wie wir und danach nur noch, wenn es am Weg liegt, auch im Rückstand (Zug ≥ 250, Vorsprung ≤ 0:
+33–45 %). Die Gesundheit beim Fressen ist bei allen gleich (Median 92–93, 2–5 % der Züge unter 40): Futter bleibt
+spät nie lange liegen, verhungert wird nicht. Bei uns treiben spät drei Terme zum Futter: der Fress-Bonus in der
+Suche (`eat_early` 8, klingt nicht ab), die Längenterme (bei Zug 300 noch 7,5 je Feld bis +10 Vorsprung) und der
+Futterweg, solange der Vorsprung unter 4 liegt.
+
+Neuer Schalter `appetite_lo` / `appetite_hi` (aus): Fress-Bonus und Futterweg zählen bis Zug `appetite_lo` voll und
+fallen linear auf null bei Zug `appetite_hi`, außer bei Hunger (`hunger_health`).
+
+Stellungstest Duell (alle 725 Duelle in `data/`, in denen eine Top-8-Snake gewinnt, 50 ms, jeder 6. Zug, gepaart gegen die
+Produktion; „alle“: n = 43 001, Basis 63,9 %; „sparsam“ = Natrix Portia, Natrix Bianca, NMC², Odiodin, Bwukinator:
+n = 28 259, Basis 64,4 %, davon Zug ≥ 250: n = 11 311, Basis 62,0 %):
+
+| Variante | alle (z) | sparsam (z) | sparsam Zug 30–100 (z) | sparsam Zug ≥ 250 (z) | Fehlgriffe ≥ 250 |
+|---|---|---|---|---|---|
+| Basis (Produktion) | 63,9 % | 64,4 % | 66,9 % | 62,0 % | 1,4 % |
+| `eat_want` 1, `want_length_lead` 1 | 63,6 % (−2,3) | 64,7 % (+2,1) | 66,2 % (−2,0) | 63,5 % (+5,8) | 1,0 % |
+| dasselbe + `length_cap` 2 | 62,6 % (−6,9) | 64,5 % (+0,5) | 63,5 % (−6,0) | 64,8 % (+8,3) | 0,8 % |
+| `length_half` 60, `length_min` 0.1 | 63,7 % (−1,9) | 64,5 % (+0,1) | 65,3 % (−3,8) | 62,7 % (+3,8) | 1,1 % |
+| `appetite` 100–200 (G1) | 64,2 % (+2,4) | 65,3 % (+5,1) | 67,0 % (+1,3) | 64,4 % (+6,9) | 0,9 % |
+| `appetite` 80–160 | 64,2 % (+1,8) | 65,4 % (+5,2) | 66,9 % (+0,2) | 64,5 % (+7,2) | 1,0 % |
+| `appetite` 100–300 | 64,4 % (+4,1) | 65,4 % (+6,1) | 67,1 % (+1,4) | 64,4 % (+7,1) | 1,0 % |
+| **`appetite` 100–200 + `length_min` 0.1 (H1)** | **64,4 % (+3,6)** | **65,6 % (+6,9)** | 67,1 % (+2,0) | **65,3 % (+8,9)** | **0,8 %** |
+| `appetite` 100–200 + `length_half` 100, `length_min` 0.1 | 64,4 % (+3,2) | 65,8 % (+7,1) | 66,7 % (−0,7) | 65,7 % (+9,6) | 0,7 % |
+| `appetite` 100–200 + `longest_bonus` 40, `length` 10 | 64,0 % | 65,5 % | 65,4 % (z −3,4 gegen G1) | 65,7 % | 0,8 % |
+
+- Weniger Fressen passt spät klar besser zu den Zügen der Sparsamen (bis +3,7 Punkte ab Zug 250, Fehlgriffe fast
+  halbiert), **vor Zug 100 aber schlechter** (−0,7 bis −3,4 Punkte): Die Gier muss mit der Zugzahl abklingen, nicht
+  über feste Gewichte. Genau das macht die Rampe: vor Zug 100 kein Unterschied, danach der volle Gewinn.
+- Futter neben dem Kopf genommen auf den Stellungen der Sparsamen (`tools/appetite.py agree`, Zug < 100 / 100–250 /
+  ≥ 250): Spitze 88,6 / 53,8 / 37,0 %, Basis 94,6 / 77,1 / 72,9 %, G1 94,7 / 66,0 / 52,1 %, H1 94,7 / 66,4 / 49,9 %.
+
+Self-Play Duell gegen die Produktion, 40 ms:
+
+| Variante (A) | B | Spiele, Seed | A–B | Elo [95 %] | Länge 100 A / B | zuerst raus A / B |
+|---|---|---|---|---|---|---|
+| G1: `appetite` 100–200 | Produktion | 400, 11 | 230–167 | **+55** [+21, +90] | 13,6 / 13,6 | 41,8 / 57,5 % |
+| **H1: G1 + `length_min` 0.1** | Produktion | 400, 12 | 259–135 | **+111** [+77, +148] | 13,6 / 13,6 | 33,8 / 64,8 % |
+| H1 über den Schlüssel `duel_game` | Produktion | 800, 21 | 480–315 | **+73** [+48, +98] | 13,7 / 13,8 | 39,4 / 60,0 % |
+| H1 + `length_min` 0 | H1 | 400, 22 | 197–202 | −4 [−39, +30] | 13,5 / 13,6 | 50,5 / 49,2 % |
+| `appetite` 60–150 + `length_min` 0.1 | H1 | 400, 23 | 200–195 | +4 [−30, +38] | 13,5 / 13,6 | 48,8 / 50,0 % |
+| H1, mit Verhungern-Statistik | Produktion | 400, 31 | 245–155 | **+80** [+45, +115] | 13,6 / 13,6 | 38,8 / 61,2 % |
+
+H1 gegen die Produktion zusammen: 984–605 bei 11 Remis in 1600 Duellen (61,8 %, etwa +84 Elo). Die Länge bei Zug 100
+ist auf beiden Seiten gleich, die Eröffnung also unverändert: Der Gewinn kommt aus der Zeit danach. Bei Zug 300 ist H1
+28,6 lang, die Produktion 30,2. Verhungert ist H1 in 0 von 400 Duellen, die Produktion in 2 (die Sim druckt beides
+jetzt mit `SIM_BEHAVIOUR=1`). Früher abklingen oder die Längenterme ganz abschalten bringt nichts mehr (Plateau).
+
+Gegnerpool (`tools/gauntlet.sh duel 200 20`, Anteil gewonnener Duelle gegen fünf Spielstile, je 200 Duelle):
+
+| A | self | hungry | territory | cautious | long | Mittel |
+|---|---|---|---|---|---|---|
+| Produktion | 0,480 | 0,600 | **0,385** | 0,448 | 0,530 | 0,489 |
+| H1 | 0,608 | 0,677 | 0,552 | 0,595 | 0,635 | **0,613** |
+
+H1 liegt gegen jeden Stil vorn. Die Produktion verliert gegen „territory“ (`opp_area` 1.2, `length` 10) 77–123: Mehr
+Gebiet und weniger Länge ist auch über H1 hinaus der nächste Kandidat (offene Ideen, Punkt 3).
+
+Sparring gegen snork (`Flood`, 160 ms auf 4 Threads gegen unsere 40 ms, je 80 Duelle, 4 gleichzeitig, Seed 61):
+Produktion 53 Siege (39 Timeouts von snork), H1 55 Siege (5 Timeouts). Kein Unterschied (z ≈ 0,3), also kein
+Rückschritt gegen einen fremden Gegner; mehr kann snork nicht mehr zeigen (Runde 10). Die Zahlen stammen aus der
+Zeile „first out“, weil `tools/opponents.sh` die Ergebniszeile mit `SIM_BEHAVIOUR=1` abgeschnitten hat (behoben).
+
+Nicht gemessen: die Fehlersammlung (`blunders` / `suite`, die Niederlagen sind strategisch, siehe Runde 8) und
+`tools/approach.py` (das Futter-Rennen betrifft Zug 1–60, dort ändert H1 nichts: Stellungstest Zug < 100 unverändert).
+
+- ✅ **Übernommen: `{"duel_game":{"weights":{"appetite_lo":100,"appetite_hi":200,"length_min":0.1}}}`.** Erste
+  Duell-Änderung, die in allen Stufen vorn liegt: Stellungstest (ab Zug 250 +3,3 Punkte gegen die Sparsamen, z +8,9),
+  Self-Play (+84 Elo, drei Läufe, jeder für sich signifikant), Gegnerpool (0,489 → 0,613), kein Rückschritt gegen
+  snork. Gilt nur in Partien, die als Duell beginnen (`Rules::players` = 2): Der Server merkt sich die Zahl der
+  Schlangen beim Start je Partie, die Werkzeuge setzen sie aus der Partie. Das Ende einer Standard-Partie mit zwei
+  Schlangen spielt weiter das alte Duell-Profil (nicht gemessen, und Standard wird gerade in der Arena ausgewertet).
+  Nach einem Server-Neustart mitten in einer Partie ist die Zahl unbekannt, dann gilt ebenfalls das alte Profil.
+- ❌ Feste Gewichte gegen die Gier (`eat_want`, `want_length_lead`, `length_cap`, kürzere Halbwertszeit): spät
+  besser, vor Zug 100 schlechter. ❌ Verlängerung bei erzwungenen Zügen.
+
+**Deploy (11-14 17:19 UTC).** Vom Nutzer freigegeben. Eingeschaltet im Duell-Zweig von `profile()` für
+`duel_game`. Gegenprobe mit dem Produktiv-Binary gegen `{"duel_game":{"weights":{"appetite_hi":0,"length_min":0.3}}}`,
+20 ms, 200 Duelle: 114–85 (+51 [+3, +101]), Länge bei Zug 300: 26,7 gegen 29,9. Server lokal geprüft (Logzeile
+`MOVE ... players=`): Duell 2, Standard 4 (auch mit zwei Überlebenden), Partie ohne `/start` ab Zug > 0: 0.
+Endstand von Runde 10 als Basis (11-12 19:15 bis 11-14 13:50 UTC):
+
+| | Runde 10 (Basis) | Erwartung Runde 11 |
+|---|---|---|
+| Duell: Partien, Siege | 180, 51,7 % | steigt |
+| Duell gegen die Top 5: Partien, Siege | 40, 22,5 % | steigt |
+| Duell gegen Natrix Portia / Bianca / Neural Tessellata: Partien, Siege | 26, 23,1 % | steigt |
+| Appetit (Futter neben dem Kopf genommen) Zug < 100 / 100–250 / ≥ 250 | 95 / 87 / 80 % | etwa 95 / 70 / 50 % |
+| Länge bei Zug 200 / 300, Vorsprung | 20,1 / 28,2, +3,8 / +6,2 | bei Zug 300 etwa 1,5–3 kürzer |
+| Niederlagen mit Längenvorsprung ≥ 5 | 19 von 83 | weniger |
+| Verhungert (`out-of-health`) | 5 in 180 | nicht mehr |
+| Zug des Todes in Niederlagen (Median) | 421 | |
+| Wertung Duell | 43,6 (#9) | 44,5–46 (Platz 6–8), siehe unten |
+
+Erwartung für die Wertung: Aus unseren Bilanzen (40 % gegen AlphaSlinky bei 2 Punkten Abstand, 22,5 % gegen die Top 5
+bei etwa 7) ergeben sich grob 30 Elo je Wertungspunkt. +84 Elo aus dem Self-Play wären voll übertragen +2,5 Punkte,
+realistisch ist ein Drittel bis die Hälfte (Runde 7: +88 im Self-Play, in der Arena nichts).
+
+
+**Suche: erzwungene Züge verlängern.** Im späten Duell hat jede zweite Stellung nur einen sicheren Zug (`trace`:
+Tiefe 0). Versuch: Ein Halbzug mit nur einem sicheren Zug verbraucht keine Tiefe, auch am Horizont (höchstens 8-mal
+je Linie; Variante mit Gegnerzügen dazu). ❌ Stellungstest 63,9 % → 62,9 % (z −5,3, mit Gegnerzügen −5,7, Fehlgriffe
+1,1 → 1,3 / 1,6 %), Self-Play 177–223 (−40 [−75, −6], 400 Spiele, 40 ms). Die Verlängerung kostet Nenn-Tiefe in den
+Linien mit Wahl, und Blätter in verschiedener Tiefe sind über den Fress-Bonus und die Längenterme schlecht
+vergleichbar. Wieder aus dem Code entfernt. Echte Zugumstellungen gibt es im Duell nicht (jeder Weg hinterlässt einen
+anderen Körper), eine Transpositionstabelle bleibt deshalb nutzlos (wie in Runde 3 gemessen).
 
 ### Runde 10 (2026-11-12): Auswertung von Runde 8, Futter-Rennen im Duell, weniger Paranoia in Standard
 
@@ -843,31 +1022,41 @@ Spiele für eine Aussage).
 
 ## Offene Ideen / nächste Schritte
 
-Stand 2026-11-12, nach erwartetem Nutzen sortiert. Ältere Listen stehen in den Runden oben.
+Stand 2026-11-14, nach erwartetem Nutzen sortiert. Ältere Listen stehen in den Runden oben.
 
-1. **Runde 10 auswerten** (deployt 11-12 18:46 UTC, frühestens 11-13 abends, 100+ Partien je Board):
-   `tools/arena.py report --since '2026-11-12 19:15' --behaviour`, für das Duell dazu
-   `--opponents 'Odiodin,Bwukinator,NMC²,rattler,AlphaSlinky'`. Basis und Erwartung stehen in der Tabelle „Deploy“ am
-   Ende von Runde 10. Beide Änderungen betreffen verschiedene Ranglisten und lassen sich getrennt auswerten.
-2. **Runde 8 ist ausgewertet** (98 Standard-Partien, 96 Duelle): Verhalten in Standard wie geplant (Rand 38 % → 21 %),
-   Siege 30,8 % → 33,7 % und Letzter 30,8 % → 30,6 % bleiben im Rauschen (±9 Punkte). Tode im Timeout-Zug 17 in 485
-   → 3 in 194.
-3. **Duell nach der Eröffnung.** Gegen die Top 5 bleiben wir auch mit gewonnenem Futter-Rennen voraussichtlich hinten.
-   Nächste Ansätze, in dieser Reihenfolge:
-   - Futter bei Gleichstand: Gleich weit entferntes Futter geht zu 64 % an die Spitze (sind wir kürzer: 81 %). Prüfen,
-     wie die Spitze das spielt (blockieren, zuerst das eigene fressen, Kopf-an-Kopf androhen).
-   - Taschen erkennen (Kammerbaum), siehe Runde 8: Niederlagen im Endspiel durch `self-collision`, seit Runde 8
-     meist mit Längenrückstand von 2–5 statt mit Vorsprung.
-   - Bewertungsideen aus snork (Runde 9): Gebiet als Anteil hoch drei, Gebiet nach Gesundheit gewichtet.
-4. **Standard: Futter.** Wir fressen bis Zug 50 7,1-mal pro 100 Züge, die Spitze 8,2–10,0. Gewichte ändern daran im
+1. **Runde 11 auswerten** (Duell, deployt 11-14 17:19 UTC, frühestens 11-15 abends, 100+ Duelle):
+   `tools/arena.py report --since '2026-11-14 17:49' --mode duel --behaviour`, dazu
+   `--opponents 'Odiodin,Bwukinator,NMC²,rattler,AlphaSlinky'` und
+   `--opponents 'Natrix Portia,Natrix Bianca,Natrix Neural Tessellata'`. Basis und Erwartung stehen in der Tabelle
+   „Deploy“ am Ende von Runde 11. Im Server-Log muss bei Duellen `players=2` stehen.
+2. **Duell: das späte Spiel um Platz.** 29 von 83 Niederlagen kippen in den letzten 25 Zügen: Wir laufen in eine
+   Tasche (oft dem Schwanz des Gegners nach in sein Gebiet) und der Gegner schließt. Die Gebietsbewertung zählt
+   Felder als unsere, die wir nicht mehr füllen können. Ansätze: Gebiet an Engstellen zerlegen (Kammerbaum,
+   Artikulationspunkte) und nur die beste Kammer zählen; Felder, die erst frei werden, nur zählen, wenn bis dahin
+   genug Platz zum Warten da ist. Mehr Tiefe über Verlängerungen hilft nicht (Runde 11), eine Transpositionstabelle
+   auch nicht.
+3. **Duell: Gebiet statt Länge.** Im Gegnerpool verliert die Produktion vor Runde 11 gegen die eigene Variante
+   „territory“ (`opp_area` 1.2, `length` 10), H1 gewinnt dort nur knapp (0,552). Auf H1 neu messen: `opp_area`
+   0.8–1.2, `area_ratio` (Gebiet als Anteil hoch drei, wie snork, Runde 9), `length` 10–20, jeweils erst
+   Stellungstest, dann Self-Play gegen H1 und Gegnerpool.
+4. **Appetit auch am Ende einer Standard-Partie?** H1 gilt nur in Partien, die als Duell beginnen. Die letzten zwei
+   Schlangen einer 4er-Partie spielen dasselbe Spiel, meist nach Zug 100. Erst messen, wenn Standard in der Arena
+   stagniert: Stellungstest auf Standard-Partien mit 2 lebenden Schlangen, Feld-Self-Play mit `{"duel": ...}`.
+5. **Futter bei Gleichstand:** Gleich weit entferntes Futter geht gegen die Top 5 zu 53 % an sie (Runde 10: 63 %).
+   Prüfen, wie die Spitze das spielt (blockieren, zuerst das eigene fressen, Kopf-an-Kopf androhen).
+6. **Zweite Arena-Snake** (`/v/dev`): halbiert die Zeit je Experiment. Wartet auf die Server-Planung des Nutzers.
+7. **Timeouts.** Seit Runde 10 in 42 von 180 Duellen, tagsüber doppelt so oft wie nachts (Runde 8). Offen: Was läuft
+   tagsüber noch auf dem Host?
+8. **Gelernte Bewertung** (großes Projekt): Stellungen aus den Arena-Duellen der Spitze und aus Self-Play, Ziel
+   Spielausgang, kleines Netz oder Regression über Merkmale statt der Handgewichte. Vorarbeit: `duelfeat`,
+   `tools/fit_duel.py`.
+9. **Standard: Futter.** Wir fressen bis Zug 50 7,1-mal pro 100 Züge, die Spitze 8,2–10,0. Gewichte ändern daran im
    Stellungstest nichts (Runde 10). Nächster Test: `area_open` 0.5 (Gesamtlänge 12–40) auf `focus_reach` 1 im
-   Feld-Self-Play, dazu `tools/approach.py` auf Standard erweitern.
-5. **Tempo.** Die Gebietsberechnung ist im späten Duell jetzt 20–30 % schneller (Runde 10), kostet dort aber immer
-   noch dreimal so viel wie früh: 34 Schritte pro Aufruf, einer pro Körpersegment. Idee: Schleife nach etwa 16
-   Schritten abbrechen und die restlichen Körperfelder dem Nachbargebiet zuschlagen (ändert die Werte, braucht also
-   Schalter und Messung). Dazu `safe_moves` über eine Belegungs-Bitmaske statt über alle Körperfelder.
-6. **Timeouts.** Weiter in etwa jedem fünften Duell, tagsüber doppelt so oft wie nachts (Runde 8). Die Regel aus
-   Runde 8 senkt die Tode, nicht die Timeouts. Offen: Was läuft tagsüber noch auf dem Host?
-7. **Fokus-Suche verfeinern:** Heuristik-Zug der übrigen Gegner (`smart` an der Vorhersagequote in `policy` weiter
-   tunen), Fokus auch im Royale testen (dort Mitte 6,1 und Rand 35 %, wie Standard vor Runde 8).
-8. **Royale** (Hazard-Rückkehr, Runde 5) und **Constrictor** (Messung reparieren, Runde 6): nachrangig.
+   Feld-Self-Play, dazu `tools/approach.py` auf Standard erweitern. Erst wenn Standard in der Arena stagniert.
+10. **Tempo.** Die Gebietsberechnung kostet im späten Duell dreimal so viel wie früh: 34 Schritte pro Aufruf, einer
+    pro Körpersegment. Idee: Schleife nach etwa 16 Schritten abbrechen und die restlichen Körperfelder dem
+    Nachbargebiet zuschlagen (ändert die Werte, braucht also Schalter und Messung). Dazu `safe_moves` über eine
+    Belegungs-Bitmaske statt über alle Körperfelder.
+11. **Fokus-Suche verfeinern:** Heuristik-Zug der übrigen Gegner (`smart` an der Vorhersagequote in `policy` weiter
+    tunen), Fokus auch im Royale testen (dort Mitte 6,1 und Rand 35 %, wie Standard vor Runde 8).
+12. **Royale** (Hazard-Rückkehr, Runde 5) und **Constrictor** (Messung reparieren, Runde 6): nachrangig.

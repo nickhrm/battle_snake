@@ -19,6 +19,8 @@ struct GameMem {
     /// our total processing time of the last move
     last_compute_ms: u64,
     last_seen: Instant,
+    /// snakes at the start of the game (0 = unknown: we first saw the game after its start)
+    players: usize,
 }
 
 struct AppState {
@@ -95,6 +97,7 @@ async fn start(AxState(app): AxState<Arc<AppState>>, Json(gs): Json<GameState>) 
             net_ms: app.default_net_ms,
             last_compute_ms: 0,
             last_seen: Instant::now(),
+            players: gs.board.snakes.len(),
         },
     );
     println!(
@@ -145,7 +148,7 @@ fn short(id: &str) -> &str {
     &id[..id.len().min(8)]
 }
 
-async fn play(app: Arc<AppState>, gs: GameState, variant: Option<(String, Value)>) -> Json<Value> {
+async fn play(app: Arc<AppState>, mut gs: GameState, variant: Option<(String, Value)>) -> Json<Value> {
     let t0 = Instant::now();
     let timeout = if gs.game.timeout == 0 {
         500.0
@@ -160,7 +163,10 @@ async fn play(app: Arc<AppState>, gs: GameState, variant: Option<(String, Value)
             net_ms: app.default_net_ms,
             last_compute_ms: 0,
             last_seen: Instant::now(),
+            // no /start seen (restart during the game): only turn 0 shows every snake
+            players: if gs.turn == 0 { gs.board.snakes.len() } else { 0 },
         });
+        gs.game.players = m.players;
         if let Some(lat) = gs.you.latency_ms() {
             if lat > 0 && m.last_compute_ms > 0 {
                 let observed = lat as f64 - m.last_compute_ms as f64;
@@ -194,7 +200,7 @@ async fn play(app: Arc<AppState>, gs: GameState, variant: Option<(String, Value)
         cfg.fallback = Some(gs.you.last_move());
         cfg.early = Duration::from_millis(early as u64);
         cfg.late = Duration::from_millis(late as u64);
-        search::search(&st, &cfg, deadline)
+        (search::search(&st, &cfg, deadline), st.rules.players)
     })
     .await;
 
@@ -204,9 +210,9 @@ async fn play(app: Arc<AppState>, gs: GameState, variant: Option<(String, Value)
     }
 
     match result {
-        Ok(r) => {
+        Ok((r, players)) => {
             println!(
-                "MOVE game={} turn={} move={} depth={} score={:.1} nodes={} ms={} budget={:.0} net={:.0}{tag}",
+                "MOVE game={} turn={} move={} depth={} score={:.1} nodes={} ms={} budget={:.0} net={:.0} players={players}{tag}",
                 short(&gid),
                 turn,
                 r.best.name(),

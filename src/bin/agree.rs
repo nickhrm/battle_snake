@@ -86,7 +86,7 @@ fn main() {
                         let Some(theirs) = dir_of(&s["Body"][0], &ns["Body"][0]) else { continue };
                         let snakes: Vec<Value> = cur.iter().map(|x| api_snake(x)).collect();
                         let gj = json!({"game": {"id": "x", "ruleset": {"name": g["RulesetName"], "version": "1", "settings": settings},
-                                 "map": g["Map"], "timeout": 500, "source": "arena"},
+                                 "map": g["Map"], "timeout": 500, "source": "arena", "players": last.len()},
                             "turn": f["Turn"],
                             "board": {"height": 11, "width": 11, "food": f["Food"].as_array().unwrap().iter().map(pt).collect::<Vec<_>>(),
                                 "hazards": f["Hazards"].as_array().map(|h| h.iter().map(pt).collect::<Vec<_>>()).unwrap_or_default(),

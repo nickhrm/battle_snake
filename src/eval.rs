@@ -77,6 +77,13 @@ pub struct Weights {
     /// `fade_lo` total length, `length_min` from `fade_hi` (0 = off).
     pub fade_lo: f32,
     pub fade_hi: f32,
+    /// Appetite: the eating bonus in the search and the pull towards food count fully up to
+    /// turn `appetite_lo` and fall linearly to zero at turn `appetite_hi`, unless we are hungry
+    /// (`hunger_health`). `appetite_hi` 0 switches it off. The top duel snakes take food next
+    /// to their head in 30-55 % of the cases after turn 100, whatever the lengths; we took it
+    /// in 80-90 %.
+    pub appetite_lo: f32,
+    pub appetite_hi: f32,
 }
 
 impl Default for Weights {
@@ -113,6 +120,8 @@ impl Default for Weights {
             crowd_hi: 55.0,
             fade_lo: 0.0,
             fade_hi: 0.0,
+            appetite_lo: 0.0,
+            appetite_hi: 0.0,
         }
     }
 }
@@ -653,6 +662,16 @@ pub fn length_factor(st: &State, w: &Weights) -> f32 {
     }
 }
 
+/// Scale of the appetite for food we do not need for our health (see `Weights::appetite_hi`).
+#[inline]
+pub fn appetite(st: &State, w: &Weights) -> f32 {
+    if w.appetite_hi > 0.0 && st.me().health >= w.hunger_health {
+        ((w.appetite_hi - st.turn as f32) / (w.appetite_hi - w.appetite_lo).max(1.0)).clamp(0.0, 1.0)
+    } else {
+        1.0
+    }
+}
+
 /// Whether snake 0 is looking for food (same rule as the food term in [`evaluate`]).
 pub fn wants_food(st: &State, w: &Weights) -> bool {
     let me = st.me();
@@ -740,7 +759,7 @@ pub fn evaluate(st: &State, w: &Weights) -> f32 {
             let urgency = if me.health < w.hunger_health {
                 1.0 + (w.hunger_health - me.health) as f32 / 20.0
             } else {
-                1.0
+                appetite(st, w)
             };
             score -= w.food_dist * urgency * d;
         }

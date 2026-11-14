@@ -29,6 +29,7 @@ Diese Datei beschreibt, wie hier gearbeitet wird. Was schon probiert wurde und w
 | `src/bin/` | Werkzeuge, siehe unten |
 | `tools/arena.py` | Daten laden, Rangliste, Auswertung seit einem Zeitpunkt |
 | `tools/approach.py` | Stellungstest für das Futter-Rennen im Duell |
+| `tools/appetite.py` | Wer nimmt Futter neben dem Kopf, nach Phase und Vorsprung (Arena-Duelle und `agree`-Tabellen) |
 | `data/` | lokale Kopie der Arena-Partien (`games/<id>.json`, `index.jsonl`, `names.json`) |
 
 ## Der Kreislauf
@@ -36,15 +37,18 @@ Diese Datei beschreibt, wie hier gearbeitet wird. Was schon probiert wurde und w
 1. **Daten holen:** `python3 -I tools/arena.py sync` (eigene Partien und die der Top 8, nur Neues).
    `tools/arena.py board` zeigt die Rangliste, `tools/arena.py report --since 'YYYY-MM-DD HH:MM'` die eigene Bilanz
    seit einem Deploy (Zeiten in UTC): Siegquote, Platzierung, Todesursachen, Timeout-Tode, Bilanz je Gegner.
-   Mit `--behaviour` dazu aus den Partien: Abstand zur Mitte und Randanteil in der Eröffnung, Länge bei Zug 30/60/100
-   und das Futter-Rennen (wer lag beim Erscheinen näher, wer hat gefressen). `--opponents a,b` beschränkt auf Partien
-   gegen diese Snakes, etwa die Top 5.
+   Mit `--behaviour` dazu aus den Partien: Abstand zur Mitte und Randanteil in der Eröffnung, Länge bei Zug 30/60/100/200/300
+   und das Futter-Rennen (wer lag beim Erscheinen näher, wer hat gefressen), dazu der Appetit (Futter neben dem Kopf
+   genommen, nach Phase). `--opponents a,b` beschränkt auf Partien gegen diese Snakes, etwa die Top 5.
+   `tools/appetite.py snakes` zeigt den Appetit aller Top-Snakes im Vergleich.
 2. **Unterschied zur Spitze suchen, in Daten, nicht im Bauch.** Erst zählen, dann einzelne Partien ansehen:
    `python3 -I tools/show.py <id> <zug>...` zeichnet das Brett, `target/release/trace <ms> honey_badger <partie>`
    zeigt Score, Gebiet und Länge pro Zug, `target/release/pos honey_badger <partie> <zug> > p.json` gibt die Stellung
    für `target/release/bench p.json 300`.
 3. **Hypothese als Variante bauen** (Schalter, aus). Eine Variante ist ein JSON-Objekt:
    `{"weights": {...}, "focus": true, "duel": {"weights": {...}}, "standard": {...}}`.
+   `duel` gilt für jede Stellung mit einem Gegner, also auch für das Ende einer 4er-Partie. `duel_game` gilt nur in
+   Partien, die als Duell begonnen haben (`Rules::players`, der Server merkt sich die Zahl je Partie).
    Alle Werkzeuge nehmen sie über die Umgebungsvariable `VARIANT`, die Sim über `--av/--bv/--xv`.
 4. **Offline messen, in dieser Reihenfolge** (billig zuerst, jede Stufe kann die Idee beenden):
    1. `cargo test --release`
@@ -63,6 +67,8 @@ Diese Datei beschreibt, wie hier gearbeitet wird. Was schon probiert wurde und w
       `target/release/suite 300 suite.jsonl`: vermeidet die Variante die bewiesenen Verlustzüge?
    6. **Futter-Rennen im Duell** `python3 -I tools/approach.py 50 '{}' '<variante>'`: Wie oft geht die Variante auf
       Arena-Stellungen auf Futter zu, das näher bei uns liegt als beim Gegner (Rand getrennt)? Etwa 7 min je Variante.
+      `python3 -I tools/appetite.py agree <names.json> a.csv b.csv` zeigt auf den Tabellen des Stellungstests, wie oft
+      die Spitze und jede Variante Futter neben dem Kopf nimmt.
 5. **In der Arena messen.** Am besten parallel über die Varianten-Snake (unten). Sonst deployen und nach einem Tag
    `tools/arena.py report --since ...` gegen den Stand davor halten.
 6. **Ins Log schreiben** (EXPERIMENTS.md: Tabelle „Stand“, neue Runde mit Zahlen, was übernommen und was verworfen).

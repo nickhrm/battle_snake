@@ -73,7 +73,7 @@ spar)
     for v in "$@"; do
         echo "== $v vs snork"
         "$SIM" --mode "$mode" --games "$games" --ms "$MS" --threads "$THREADS" --seed "$SEED" \
-            --av "$v" --bhttp 127.0.0.1:5001 --timeout 260 | tail -2
+            --av "$v" --bhttp 127.0.0.1:5001 --timeout 260 | grep -E '^mode=|^  [AB]:|timeouts'
     done
     ;;
 *)

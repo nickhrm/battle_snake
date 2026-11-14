@@ -75,7 +75,7 @@ impl Replay {
         let list = |k: &str| f[k].as_array().map(|h| h.iter().map(pt).collect::<Vec<_>>()).unwrap_or_default();
         let gj = json!({
             "game": {"id": self.id, "ruleset": {"name": g["RulesetName"], "version": "1", "settings": settings},
-                     "map": g["Map"], "timeout": 500, "source": "arena"},
+                     "map": g["Map"], "timeout": 500, "source": "arena", "players": self.players()},
             "turn": f["Turn"],
             "board": {"height": g["Height"].as_i64().unwrap_or(11), "width": g["Width"].as_i64().unwrap_or(11),
                       "food": list("Food"), "hazards": list("Hazards"),

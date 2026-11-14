@@ -415,6 +415,7 @@ impl World {
         let dmg = if mode == Mode::Royale { 14 } else { 0 };
         let mut rules = Rules::new(w, h, false, mode == Mode::Constrictor, dmg);
         rules.royale = mode == Mode::Royale;
+        rules.players = n as u8;
         let corners = [(1, 1), (1, 9), (9, 1), (9, 9)];
         let cardinals = [(1, 5), (5, 1), (5, 9), (9, 5)];
         let mut pts: Vec<(i32, i32)> = if n <= 4 {
@@ -561,8 +562,11 @@ struct Behaviour {
     n60: f64,
     len100: f64,
     n100: f64,
+    len300: f64,
+    n300: f64,
     games: f64,
     first_out: f64,
+    starved: f64,
 }
 
 impl Behaviour {
@@ -576,19 +580,24 @@ impl Behaviour {
         self.n60 += o.n60;
         self.len100 += o.len100;
         self.n100 += o.n100;
+        self.len300 += o.len300;
+        self.n300 += o.n300;
         self.games += o.games;
         self.first_out += o.first_out;
+        self.starved += o.starved;
     }
 
     fn line(&self, name: &str) -> String {
         format!(
-            "{name}: centre<30 {:.2} edge<30 {:.1}% len30 {:.2} len60 {:.2} len100 {:.2} first out {:.1}%",
+            "{name}: centre<30 {:.2} edge<30 {:.1}% len30 {:.2} len60 {:.2} len100 {:.2} len300 {:.2} first out {:.1}% starved {:.1}%",
             self.centre / self.open_turns.max(1.0),
             100.0 * self.edge / self.open_turns.max(1.0),
             self.len30 / self.n30.max(1.0),
             self.len60 / self.n60.max(1.0),
             self.len100 / self.n100.max(1.0),
-            100.0 * self.first_out / self.games.max(1.0)
+            self.len300 / self.n300.max(1.0),
+            100.0 * self.first_out / self.games.max(1.0),
+            100.0 * self.starved / self.games.max(1.0)
         )
     }
 }
@@ -668,6 +677,9 @@ fn play(
         for (i, b) in beh.iter_mut().enumerate() {
             let sn = &w.st.snakes[i];
             if !sn.alive {
+                if died[i] == u32::MAX && sn.health <= 0 {
+                    b.starved += 1.0;
+                }
                 continue;
             }
             let (x, y) = w.st.rules.xy(sn.head());
@@ -687,6 +699,10 @@ fn play(
             if w.st.turn == 100 {
                 b.len100 += sn.len() as f64;
                 b.n100 += 1.0;
+            }
+            if w.st.turn == 300 {
+                b.len300 += sn.len() as f64;
+                b.n300 += 1.0;
             }
         }
         w.shrink();

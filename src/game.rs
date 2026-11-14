@@ -44,6 +44,9 @@ pub struct Rules {
     /// shrinking board; hazards can be absent during the first turns
     pub royale: bool,
     pub hazard_damage: i32,
+    /// Number of snakes at the start of the game, 0 if unknown. The requests of the engine do
+    /// not carry it (dead snakes just disappear); our server and tools add it.
+    pub players: u8,
     /// number of stacked hazards on each cell
     pub hazards: Vec<u8>,
     /// hazard bitboard (only valid when `bitboard` is true); set by `finalize`
@@ -98,6 +101,7 @@ impl Rules {
             constrictor,
             royale: false,
             hazard_damage,
+            players: 0,
             hazards: vec![0; cells],
             hazard_bb: 0,
             even_bb: 0,

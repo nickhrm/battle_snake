@@ -271,9 +271,13 @@ def behaviour(gs):
 
     Food race: every food that appears in turn 1-60 and is eaten while both sides of a duel are
     alive (multi-player: while we are alive), by who was closer when it appeared and who ate it.
+    Appetite: how often we take food that lies next to our head (and next to no other head) while
+    our health is at least 50, by phase. The top duel snakes take it in about 90 % of the cases
+    before turn 100, 50-60 % up to turn 250 and 35-40 % after that.
     """
     cdist, edge, lens, leads = [], 0, collections.defaultdict(list), collections.defaultdict(list)
     race = collections.Counter()
+    adjacent = collections.defaultdict(lambda: [0, 0])
     for g in gs:
         try:
             game = json.load(open(f"{ROOT}/games/{g['id']}.json"))
@@ -292,11 +296,17 @@ def behaviour(gs):
             if t < 30 and len(alive) >= min(3, len(g["snakes"])):
                 cdist.append(abs(hd["X"] - w // 2) + abs(hd["Y"] - h // 2))
                 edge += hd["X"] in (0, w - 1) or hd["Y"] in (0, h - 1)
-            if t in (30, 60, 100):
+            if t in (30, 60, 100, 200, 300):
                 lens[t].append(len(mine["Body"]))
                 leads[t].append(len(mine["Body"]) - max(len(s["Body"]) for s in others))
             dist = lambda s, c: abs(s["Body"][0]["X"] - c[0]) + abs(s["Body"][0]["Y"] - c[1])
             food = {(c["X"], c["Y"]) for c in f["Food"]}
+            near = [c for c in food if dist(mine, c) == 1 and all(dist(s, c) != 1 for s in others)]
+            after = next((s for s in frames[i + 1]["Snakes"] if s["ID"] == mine["ID"]), None)
+            if near and mine["Health"] >= 50 and after and not after.get("Death"):
+                a = adjacent["turn < 100" if t < 100 else "100-250" if t < 250 else ">= 250"]
+                a[0] += (after["Body"][0]["X"], after["Body"][0]["Y"]) in near
+                a[1] += 1
             for c in food:
                 if c not in known:
                     known[c] = (t, dist(mine, c), min(dist(s, c) for s in others))
@@ -312,8 +322,9 @@ def behaviour(gs):
     if cdist:
         print(f"   opening (turn < 30): centre distance {mean(cdist)}, on the edge {100 * edge / len(cdist):.1f} %")
     if lens[30]:
-        print("   length at turn 30 / 60 / 100: " + " / ".join(mean(lens[t]) for t in (30, 60, 100))
-              + ", lead over the longest: " + " / ".join(mean(leads[t]) for t in (30, 60, 100)))
+        turns = (30, 60, 100, 200, 300)
+        print("   length at turn 30 / 60 / 100 / 200 / 300: " + " / ".join(mean(lens[t]) for t in turns)
+              + ", lead over the longest: " + " / ".join(mean(leads[t]) for t in turns))
     parts = []
     for rel in ("we closer", "tie", "they closer"):
         k, n = race[rel, True], race[rel, True] + race[rel, False]
@@ -321,6 +332,10 @@ def behaviour(gs):
             parts.append(f"{rel} {100 * k / n:.0f} % ours ({k}/{n})")
     if parts:
         print("   food race (food of turn 1-60): " + ", ".join(parts))
+    parts = [f"{k} {100 * a[0] / a[1]:.0f} % ({a[0]}/{a[1]})" for k in ("turn < 100", "100-250", ">= 250")
+             if (a := adjacent[k])[1]]
+    if parts:
+        print("   appetite (food next to our head taken, health >= 50): " + ", ".join(parts))
 
 
 def main():
